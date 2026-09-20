@@ -129,11 +129,56 @@ def expand_dir(path, cap, top):
             "items": [{"name": os.path.basename(p),
                        "rel": os.path.relpath(p, root),
                        "size": s,
-                       "mtime": time.strftime("%Y-%m-%d", time.localtime(m))}
+                       "mtime": fmt_date(m)}
                       for p, s, m in files[:top]]}
 
 
 # ────────────────────────── 工具 ──────────────────────────
+FMT_UNKNOWN = "未知"
+
+# ★ 第三轮修（2026-09-20）：坏时间戳会把整场扫描带走。
+#   现场：C:\Users\...\AppData\LocalLow\Tencent\WeType\Dict\**\*.bin 有 5 个微信输入法
+#   词典文件，mtime = -11644318675.68624（约公元 1601 年）。Windows 的 CRT 不接受
+#   负时间戳 —— 实测 time.localtime(-1) 就报 OSError: [Errno 22] Invalid argument，
+#   gmtime 同样。全盘 135.8 万个文件里就这 5 个，代价却是 112 万文件的扫描全白跑
+#   （卡在「正在归纳条目…」，然后整屏 traceback）。
+#   坏时间戳还不只是"会崩"：它会污染聚合 —— lo = min(所有 mtime)，混进一个负数，
+#   整个目录的「最老内容」就变成 1601 年，年代视图把微信输入法目录归进 1969 年前。
+#   就算不崩，结论也是错的。
+#   规矩：任何要变成日期的地方先过 safe_epoch；认不出就老实写「未知」，绝不抛。
+_MTIME_MAX = 4102444800.0      # 2100-01-01。再往后就不像真实文件时间了，按坏值处理
+
+
+def safe_epoch(ts):
+    """把任意 stat 时间戳收敛成「有限、且 localtime 吃得下」的秒数；认不出返回 None。
+
+    注意上限 2100 年是**我们的策略**，不是平台边界：实测本机 localtime 能吃到
+    3001 年（32536799999），但那种值出现在真实文件上只能说明元数据坏了。宁可标
+    「未知」，也不要拿它当真去算年代。
+    """
+    try:
+        t = float(ts)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(t):        # nan / inf
+        return None
+    if t < 0.0 or t > _MTIME_MAX:
+        return None
+    return t
+
+
+def fmt_date(ts):
+    """epoch 秒 → "YYYY-MM-DD"。坏值一律 FMT_UNKNOWN，不抛异常。"""
+    t = safe_epoch(ts)
+    if t is None:
+        return FMT_UNKNOWN
+    try:
+        return time.strftime("%Y-%m-%d", time.localtime(t))
+    except (OSError, ValueError, OverflowError):
+        # 各平台的接受区间不一致，兜底不能省 —— safe_epoch 只是快速路径
+        return FMT_UNKNOWN
+
+
 def fmt_size(n):
     for u, d in (("GB", 1 << 30), ("MB", 1 << 20), ("KB", 1 << 10)):
         if n >= d:
@@ -142,10 +187,15 @@ def fmt_size(n):
 
 
 def idle_days(mtime):
-    try:
-        return max(0.0, (time.time() - mtime) / 86400.0)
-    except Exception:
-        return 0.0
+    """闲置天数。时间戳不可信时返回 None —— 不能编一个数字出来。
+
+    老实现直接算 (now - mtime)/86400，碰上那个 1601 年的值会得出 155488 天
+    （15.5 万年），摆在界面上比不显示还糟。
+    """
+    t = safe_epoch(mtime)
+    if t is None:
+        return None
+    return max(0.0, (time.time() - t) / 86400.0)
 
 
 def is_reserved(name):
@@ -378,10 +428,14 @@ def build_entries(root, files, on_step=None, should_stop=None):
         n["ext_b"][e] += s
         n["seg_b"]["(根目录下的文件)"] += s     # 这一层自己的直接文件
         n["big"].append((s, os.path.basename(p)))
-        if n["lo"] is None or m < n["lo"]:
-            n["lo"] = m
-        if n["hi"] is None or m > n["hi"]:
-            n["hi"] = m
+        # ★ 第三轮修：坏时间戳必须挡在聚合之外。
+        #   混进一个负数，整个目录的「最老内容」就被拉到 1601 年，年代视图跟着错。
+        ms = safe_epoch(m)
+        if ms is not None:
+            if n["lo"] is None or ms < n["lo"]:
+                n["lo"] = ms
+            if n["hi"] is None or ms > n["hi"]:
+                n["hi"] = ms
 
     # ── 补全所有祖先节点（每个祖先只走一次，O(目录数)）──
     seen = set()
@@ -463,34 +517,71 @@ def build_entries(root, files, on_step=None, should_stop=None):
     def entry_dir(d, total, cnt):
         sig = sig_of(d)
         try:
-            mt = os.stat(d).st_mtime
+            mt = safe_epoch(os.stat(d).st_mtime)
         except OSError:
-            mt = 0
+            mt = None
         # ★ 目录自身的 mtime 只反映"最近有没有新增文件"，对缓存类目录完全没有区分度。
         #   所以折叠成一条的目录，额外记下它内部最老文件的时间 —— 年代视图用这个。
-        oldest = sig.get("mtime_oldest") or mt
+        #   sig 里的 lo 已在 Pass A 过滤掉坏值，这里直接采信；为 None 才退回目录自身 mtime。
+        #   （不能用 `lo or mt`：lo == 0 是合法时间戳，被 or 当成假值会误退。）
+        lo = sig.get("mtime_oldest")
+        oldest = lo if lo is not None else mt
+        idle = idle_days(oldest)
         return {"path": d, "name": os.path.basename(d) or d, "size": total,
-                "files": cnt, "mtime": time.strftime("%Y-%m-%d", time.localtime(mt)),
+                "files": cnt, "mtime": fmt_date(mt),
                 "mtime_epoch": mt,
-                "mtime_oldest": time.strftime("%Y-%m-%d", time.localtime(oldest)),
+                "mtime_oldest": fmt_date(oldest),
                 "mtime_oldest_epoch": oldest,
-                "idle_days_oldest": round(idle_days(oldest)),
+                "idle_days_oldest": (round(idle) if idle is not None else None),
                 "privacy": privacy_hit(os.path.basename(d)),
                 "sig": sig, "is_dir": True}
 
     def entry_file(p, s, m):
+        ms = safe_epoch(m)
+        idle = idle_days(ms)
         return {"path": p, "name": os.path.basename(p), "size": s, "files": 1,
-                "mtime": time.strftime("%Y-%m-%d", time.localtime(m)),
-                "mtime_epoch": m,
-                "mtime_oldest": time.strftime("%Y-%m-%d", time.localtime(m)),
-                "mtime_oldest_epoch": m,
-                "idle_days_oldest": round(idle_days(m)),
+                "mtime": fmt_date(ms),
+                "mtime_epoch": ms,
+                "mtime_oldest": fmt_date(ms),
+                "mtime_oldest_epoch": ms,
+                "idle_days_oldest": (round(idle) if idle is not None else None),
                 "privacy": privacy_hit(os.path.basename(p)),
                 "sig": {"top_ext": [[os.path.splitext(p)[1].lower() or "(无扩展名)", 1, s]],
                         "big_ext_by_count": [[os.path.splitext(p)[1].lower() or "(无扩展名)", 1]],
                         "top_seg": [[os.path.basename(p), s]],
                         "biggest": [[os.path.basename(p), s]]},
                 "is_dir": False}
+
+    def degraded_entry(path, total, cnt, is_dir):
+        """兜底条目：体积和文件数照留，只有时间标「未知」。
+
+        ★ 第三轮修：单条构造出意外，不该让 112 万文件的扫描白跑。丢条目等于凭空
+          少一块体积，用户还以为自己盘里就这些 —— 降级保留比丢掉诚实得多。
+        """
+        try:
+            pv = privacy_hit(os.path.basename(path))
+        except Exception:
+            # 兜底里再兜一层：连隐私标记都算不出来的话，宁可不标，也不能二次抛。
+            pv = False
+        return {"path": path, "name": os.path.basename(path) or path,
+                "size": total, "files": cnt,
+                "mtime": FMT_UNKNOWN, "mtime_epoch": None,
+                "mtime_oldest": FMT_UNKNOWN, "mtime_oldest_epoch": None,
+                "idle_days_oldest": None,
+                "privacy": pv,
+                "sig": {}, "is_dir": is_dir, "time_unknown": True}
+
+    def entry_dir_safe(d, total, cnt):
+        try:
+            return entry_dir(d, total, cnt)
+        except Exception:
+            return degraded_entry(d, total, cnt, True)
+
+    def entry_file_safe(p, s, m):
+        try:
+            return entry_file(p, s, m)
+        except Exception:
+            return degraded_entry(p, s, 1, False)
 
     entries = []
     max_collapse = sc.get("collapse_max_gb", 4) * 1024 ** 3
@@ -500,7 +591,7 @@ def build_entries(root, files, on_step=None, should_stop=None):
     def add_files(d):
         for i in direct.get(d, []):
             if files[i][1] >= min_bytes and len(entries) < max_items:
-                entries.append(entry_file(*files[i]))
+                entries.append(entry_file_safe(*files[i]))
 
     # ★ 按「体积」优先遍历，不按字母序。
     #   老实现是深度优先 + 先到先得：条目数一凑满 max_items，后面所有目录直接 return。
@@ -533,7 +624,7 @@ def build_entries(root, files, on_step=None, should_stop=None):
                 for cd in kids:
                     push(cd)
                 continue
-            entries.append(entry_dir(d, total, cnt))
+            entries.append(entry_dir_safe(d, total, cnt))
             continue
         # 不够碎（被某个超大单文件主导）→ 不折叠，拆开
         add_files(d)
@@ -706,7 +797,11 @@ def score_entry(e, kind, conf, d_raw):
     conf = _conf01(conf)
     d_raw = _num(d_raw)
     sh = w["shrink_floor"] + (1 - w["shrink_floor"]) * max(0.0, min(1.0, conf))
-    ag = 1.0 + w["age_max"] * min(1.0, idle_days(e["mtime_epoch"]) / w["age_full_days"])
+    idle = idle_days(e["mtime_epoch"])
+    # ★ 第三轮修：时间戳不可信时 idle 是 None。既不能拿它做除法（TypeError），
+    #   也不该给「越老越该删」的年龄加成 —— 未知一律按中性 1.0 处理，不猜。
+    age_norm = 0.0 if idle is None else min(1.0, idle / w["age_full_days"])
+    ag = 1.0 + w["age_max"] * age_norm
     raw = d_raw * sh * ag
     cap = r["kind_num_cap"].get(kind, 3.0)
     if conf < r["low_conf_threshold"]:
@@ -1005,12 +1100,13 @@ def judge_pipeline(job, entries):
 
         for i in c["members"]:
             e = entries[i]
+            idle = idle_days(e["mtime_epoch"])
             items.append({
                 "path": e["path"], "name": e["name"], "size": e["size"],
                 "files": e["files"], "mtime": e["mtime"],
                 "mtime_oldest": e.get("mtime_oldest"),
-                "idle_days": round(idle_days(e["mtime_epoch"])),
-                "idle_days_oldest": e.get("idle_days_oldest", 0),
+                "idle_days": (round(idle) if idle is not None else None),
+                "idle_days_oldest": e.get("idle_days_oldest"),
                 "is_dir": e["is_dir"], "privacy": e.get("privacy", False),
                 "kind": k, "kind_conf": _conf01(kc, None), "kind_prob": _dict_or_none(kp),
                 "d_raw": _num(dr, None), "conf": _conf01(dc, None),

@@ -916,7 +916,7 @@ function renderYears(){
     const note = age===null ? "" : (age>=2 ? "← 两年以上没碰过" : age===0 ? "今年还在动" : "");
     const extra = d.dirs ? `（其中 ${d.dirs} 个文件夹按"内部最老内容"归年）` : "";
     return `<div class="big" style="grid-template-columns:112px minmax(0,1fr) 74px 44px">
-      <span style="font-size:12px">${esc(y)} 年</span>
+      <span style="font-size:12px">${/^\d{4}$/.test(y) ? esc(y) + " 年" : "时间未知"}</span>
       <div class="track"><i style="width:${Math.round(d.size/max*100)}%;background:${age>=2?"#E24B4A":age===0?"#1D9E75":"#EF9F27"}"></i></div>
       <span style="text-align:right;font-size:12px">${fsize(d.size)}</span>
       <span class="tiny tx3" style="text-align:right">${Math.round(d.size/tot*100)}%</span>
