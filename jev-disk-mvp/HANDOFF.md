@@ -117,8 +117,10 @@
 | 31 | 把握列 tooltip 承诺「没把握的会浮上来」，实际排序是**组内**的（全列表最小的 0.07 可能躺在第 24 行） | 文案改成实话；另加「按动作分组」开关 —— 关掉就是真正的全局排序 |
 | 32 | 「载入上次结果」永远只载**最新那一份**，缓存目录里躺着 20 份没法挑（录屏想挑一份好看的都挑不了） | 服务端 `/api/caches?meta=1` 多回元数据 —— **只读每个文件开头 2KB**（整份几 MB，20 个全读太慢；root/created 这些键在 `json.dump` 里排最前）；前端弹选择列表 |
 | 33 | 清单 560px 可视 / 68,094px 内容 = **要滚 122 屏**，且分组条不可点、没搜索没筛选 | 加搜索框（名字/路径/类别）+ 四个动作筛选项 + 分组折叠 + 「显示 N / 共 M 条」+ 明确空态 |
+| 34 | ★ **坏时间戳**：NTFS 上真有负的 mtime —— 实测微信输入法词典 5 个 `.bin` 的 mtime = **-11644318675.68**（约公元 1601 年，**资源管理器自己也显示 `01/03/1601`**）→ Windows 的 `time.localtime()` 对负值抛 `OSError: [Errno 22] Invalid argument`（`gmtime` 一样），**整场 112 万文件的扫描白跑**（界面卡在「正在归纳条目…」然后整屏 traceback）。坑还不止"会崩"：`lo = min(所有 mtime)` 混进一个负数，整个目录的「最老内容」就被拉到 1601 年，年代视图跟着错 —— **不崩结论也是错的** | 新增 `safe_epoch()` / `fmt_date()`（认不出就标「未知」，绝不抛）；**`lo`/`hi` 聚合前先过滤**（污染源头，光把 `strftime` 包一层 try 不够）；`idle_days()` 对坏值返回 `None`（老代码会算出 **155488 天**这种数字）。另加 `degraded_entry()`：单条构造失败就降级保留体积和文件数，不再让一个条目掀掉整场 |
+| 35 | 把 `idle_days()` 改成**可能返回 `None`** 之后，**下游两处没跟着改**：`score_entry` 里的浮点除法和汇总里的 `round(None)` → 直接 `TypeError`。这是"修 A 带出 B"的典型 | ★ **改函数返回值语义之前，先 grep 出全部调用点**（`grep -n "idle_days" server.py` → 4 处），逐个接受 `None`；时间未知一律按**中性**处理（不给年龄加成，也不惩罚） |
 
-> 🧪 **回归测试（四套，共 96 条断言）**
+> 🧪 **回归测试（五套，共 125 条断言）**
 > - `tests/test_fixes.py` —— 14–17 那四条，**8 条**。
 > - `tests/test_adversarial.py` —— 18–26 那九条，**28 条**。这套的立场是"假装我是攻击者"：
 >   不按"改了什么"审，而是把**模型回包的每一种类型**（缺失/None/字符串/bool/百分制/nan/inf/文字）
@@ -130,11 +132,17 @@
 > - `tests/ui_verify.cjs` —— 27–33 全部，**38 条**。真实 Edge（无头 + CDP）把界面点一遍 + 真扫一次，
 >   拿**屏幕上的数字**去和**缓存文件里的真值**对账。这是唯一能抓住 27 和 30 这类问题的测法 ——
 >   它们在纯逻辑测试里完全看不出来。
+> - `tests/test_mtime_guard.py` —— 34、35 那两条，**29 条**。除了造样本，它还**直接 stat 本机那 5 个真实
+>   坏时间戳文件**（找不到就 skip，换机器也能跑），并**拿真实的微信输入法目录跑一遍完整归纳** ——
+>   也就是用户报的那次崩溃现场。第一遍 49 处红，改完全绿。
 > - 跑法：在 `jev-disk-mvp/` 下
 >   `python tests\test_fixes.py` + `python tests\test_adversarial.py` +
+>   `python tests\test_mtime_guard.py` +
 >   `node tests\test_ui_logic.mjs` +
 >   `node tests\ui_verify.cjs "E:\whisper_models"`（最后一条需要 8849 服务已带 key 起好）。
 >   **改代码前先让它们红，改完必须全绿。**
+>   ⚠️ 跑 Python 测试时**别让输出过 PowerShell 管道**（中文会乱）—— 用 Python 自己写文件再读，
+>   细节见第八节末尾。
 > - 想知道"某个改动到底修没修到东西"：`python tests\ab_compare.py` —— 同一份回包喂给新旧两版代码逐条对照，
 >   结果存 `tests/ab_compare_last.txt`。**修完之后真正要回答的不是"现在对不对"，而是"修之前会怎样"。**
 
@@ -166,6 +174,13 @@
   改动量 `index.html +212/-35`、`server.py +44/-2`、`config.json` **零改动**。
   最终四套测试 **96 条断言全绿**。回退点 `_backup/usability-fix-20260920-161743/`（拷回两个文件即可）。
   完整报告：`review-2026-09-20/可用性修复记录.html`，改动清单 `review-2026-09-20/可用性修复改动.diff`。
+- **第四轮（用户实报崩溃，TDD）**：扫 C:\ 读到 112 万文件后卡在「正在归纳条目…」然后整屏 traceback ——
+  `OSError: [Errno 22] Invalid argument`。根因是 **NTFS 上真有 1601 年的负时间戳**
+  （微信输入法 5 个词典 `.bin`），而 Windows 的 `time.localtime()` 对负值直接抛（见第四节 34、35）。
+  修了 6 处（`safe_epoch`/`fmt_date`、聚合前过滤、`idle_days` 返回 `None`、下游两处、降级保留、前端文案）。
+  **真扫 C:\ 112.3 万文件 / 16s 扫完 / 732 条目 / 113.91 GB / 归纳 8s —— 不再崩，年代零污染。**
+  新增第五套测试 29 条（先红 49 处），**总回归 125 条全绿**。
+  改动量 `server.py +121/-25`、`index.html +1/-1`、`config.json` **零改动**。提交 `83c9fac`。
 
 **第三轮明确没做的**（别以为都修完了）
 - 键盘与无障碍：`tabindex` 0 个、`aria` 0 个、无快捷键。独立一块工作，没碰。
@@ -196,7 +211,7 @@ jev-disk-mvp/
 ├── key.txt          ⚠️ API key（.gitignore，勿提交）
 ├── cache/           扫描结果 JSON（可「载入上次结果」回放，录屏不重跑）
 ├── tests/           回归测试四套 + 两个小工具（动代码后必跑，见第四节末）
-│                    test_fixes.py(8) · test_adversarial.py(28)   ← 后端
+│                    test_fixes.py(8) · test_adversarial.py(28) · test_mtime_guard.py(29)  ← 后端
 │                    test_ui_logic.mjs(22) · ui_verify.cjs(38)   ← 界面：纯逻辑 / 真实浏览器
 │                    ab_compare.py · js-syntax-check.cjs
 ├── _backup/         改动前的带时间戳存档（含补丁脚本、命中日志，可整体回退）
@@ -245,3 +260,12 @@ jev-disk-mvp/
   ⇒ 任何依赖符号链接的测试都要用 `os.path.lexists()` 复核结果，别信返回值；
   造不出样本时改用 mock 直接测分支逻辑（见 `test_adversarial.py` 里
   `test_non_file_non_dir_entries_are_accounted`）。
+- ★ **跑本机 Python 测试时，别让输出过 PowerShell 管道**（中文会被二次编码成乱码）。
+  可靠做法：写个小 runner，在 Python 内部 `sys.stdout = io.StringIO()` → 跑完
+  `open(path, "w", encoding="utf-8")` 一口气写文件 → 再读那个文件。
+  **两个必备细节**：① `unittest.main()` 会把 `sys.argv` 当测试选择器，
+  runner 里必须先 `sys.argv = [target]`，否则报 `module '__main__' has no attribute '<路径>'`；
+  ② `unittest discover -s tests` 在 `tests/` 没有 `__init__.py` 时会报
+  `Start directory is not importable` → 改成按文件 `importlib.util.spec_from_file_location` 加载。
+- `tests/js-syntax-check.cjs` **必须带文件参数**（`node js-syntax-check.cjs index.html`），
+  不传会 `readFileSync(undefined)` 崩；它自己会把结果写到 `%TEMP%\uf_js_syntax.txt`，读那个比看控制台可靠。
