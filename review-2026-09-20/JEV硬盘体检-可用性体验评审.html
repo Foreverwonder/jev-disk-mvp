@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JEV 硬盘体检 · 用起来到底怎么样</title>
+<style>
+:root{
+  --bg:#FBFAF7; --card:#FFFFFF; --surf:#F1EFE8; --line:#E4E1D8; --line2:#D3D1C7;
+  --tx:#2C2C2A; --tx2:#5F5E5A; --tx3:#8A8880;
+  --green:#1D9E75; --green-bg:#E1F5EE; --green-tx:#085041;
+  --blue:#378ADD; --blue-bg:#E6F1FB; --blue-tx:#0C447C;
+  --amber:#EF9F27; --amber-bg:#FAEEDA; --amber-tx:#854F0B;
+  --red:#E24B4A; --red-bg:#FCEBEB; --red-tx:#A32D2D;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:15px/1.75 "PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;font-weight:600;margin:0 0 6px;letter-spacing:-.3px}
+.sub{color:var(--tx2);font-size:14px;margin-bottom:34px}
+h2{font-size:19px;font-weight:600;margin:52px 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h2 .n{color:var(--tx3);font-weight:400;font-size:14px;margin-right:8px}
+h3{font-size:15.5px;font-weight:600;margin:26px 0 8px}
+p{margin:12px 0}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;
+  background:var(--surf);padding:1px 5px;border-radius:4px;color:#3A3A38}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:18px 0}
+.card.warn{border-color:#F0C9C9;background:#FFFDFD}
+.card.good{border-color:#C6E7DA;background:#FCFEFD}
+.card.info{border-color:#C6DBF2;background:#FCFDFF}
+.verdict{background:#2C2C2A;color:#FBFAF7;border-radius:12px;padding:22px 24px;margin:26px 0}
+.verdict p{margin:0}
+.verdict .big{font-size:17.5px;line-height:1.7;font-weight:500}
+.verdict .small{color:#B9B7AE;font-size:13.5px;margin-top:12px;line-height:1.65}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--tx2);font-weight:500;background:var(--surf)}
+td.num{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;padding:1.5px 7px;border-radius:5px;font-weight:600;white-space:nowrap}
+.t-p0{background:var(--red-bg);color:var(--red-tx)}
+.t-p1{background:var(--amber-bg);color:var(--amber-tx)}
+.t-p2{background:#EFEFE9;color:#5F5E5A}
+.t-ok{background:var(--green-bg);color:var(--green-tx)}
+img.shot{width:100%;border:1px solid var(--line2);border-radius:10px;margin:10px 0 4px;display:block}
+.cap{font-size:12.5px;color:var(--tx3);margin:0 0 22px;line-height:1.6}
+.hi{background:#FFF3D6;padding:0 3px;border-radius:3px}
+u.ln{text-decoration:none;border-bottom:1.5px solid var(--green);padding-bottom:1px}
+ul,ol{margin:12px 0;padding-left:22px}
+li{margin:7px 0}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:13.5px;margin:10px 0}
+.kv .v{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--tx2);text-align:right}
+.score{display:grid;grid-template-columns:1fr 52px;gap:0;font-size:14px;align-items:center}
+.score .row{display:grid;grid-template-columns:1fr 64px;gap:12px;align-items:center;
+  padding:11px 0;border-bottom:1px solid var(--line)}
+.score .row:last-child{border-bottom:0}
+.score .s{font-family:ui-monospace,Consolas,monospace;text-align:right;font-weight:600}
+.score .why{font-size:12.5px;color:var(--tx2);grid-column:1/-1;margin-top:2px}
+.tot{display:flex;justify-content:space-between;align-items:baseline;
+  margin-top:14px;padding-top:14px;border-top:2px solid var(--tx)}
+.tot b{font-size:26px;font-weight:600}
+.cmp{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:16px 0}
+.cmp>div{border-radius:9px;padding:12px 14px;font-size:12.5px;line-height:1.6}
+.cmp .a{background:var(--green-bg);border:1px solid #C6E7DA}
+.cmp .b{background:var(--amber-bg);border:1px solid #F0DDB8}
+.cmp .c{background:var(--red-bg);border:1px solid #F0C9C9}
+.cmp .h{font-weight:600;font-size:12px;display:block;margin-bottom:4px}
+.cmp code{background:rgba(255,255,255,.7)}
+.q{color:var(--tx3);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>JEV 硬盘体检 · 用起来到底怎么样</h1>
+<div class="sub">
+  这一轮不看代码写得对不对，只看<b>把它打开、点一遍、真扫一次，手感如何</b>。<br>
+  方法：本地起服务 → 真实浏览器（Edge 无头 + CDP）逐步点击 → 全程截图 + 量化 → 真扫一次 48 万文件的目录。
+  所有数字都是本机实测，出处标在括号里。
+</div>
+
+<div class="verdict">
+  <p class="big">
+    它的<b>设计思路比市面上几乎所有清理软件高一档</b>——不给你一个"垃圾分"，而是给你三组动作和一堆可核查的依据。扫描过程透明到我挑不出第二家。
+  </p>
+  <p class="big" style="margin-top:14px">
+    但它现在最伤人的问题不是缺功能，是<b>同一个屏幕上几个数字互相打架</b>。
+    对一个主打"透明、可核查"的工具来说，这是最贵的一类瑕疵——它伤的正好是你唯一想卖的那个东西。
+  </p>
+  <p class="small">
+    体验分 <b>40.5 / 60</b>（六项，见第 6 节）。分数的分布很不均匀：扫描过程 9.0，细节一致性 6.0，无障碍 2.5。
+    <br>换句人话：<b>骨架漂亮，肌肉也有，就是接缝处漏风。</b>
+  </p>
+</div>
+
+<h2><span class="n">01</span>先说清楚：我这两轮是不是跑偏了</h2>
+
+<p>是跑偏了。你说得对。</p>
+
+<p>你第一次让我评的是<b>"交互设计、可用性、文档完整性、定位、执行落地"</b>五个维度，那是对的。但后面你说了"修"和"对抗性审查"，我就一头扎进了"有没有 bug"——测试写到 36 条断言、补丁脚本改到 17 个锚点。那回答的是<b>"代码对不对"</b>。</p>
+
+<p>你现在问的是另一件事：<b>「这东西我拿去用，顺不顺手、可不可信、会不会在别人面前掉链子。」</b></p>
+
+<p>这两个问题的答案可以完全相反。一个程序可以一行 bug 都没有，但用起来让人血压升高；也可以浑身是小毛病，但一上手就知道该干嘛。</p>
+
+<p>所以这一轮我换了方法。<b>不读代码猜体验，而是真的把它打开、真的点。</b>下面每一条结论，要么有截图，要么有实测数字，要么有代码行号。</p>
+
+<div class="card info">
+  <b>怎么保证我没有"看着代码想象界面"？</b>
+  <p style="margin:8px 0 0">我起了一个本地服务，用 CDP 驱动真实 Edge 无头浏览器，按真人的顺序点了 15 个步骤：开页面 → 关弹窗 → 载缓存 → 载入 2000 条大结果 → 点名字展开 → 点列头排序 → 切三个页签 → 右键 → 点开目录 → 开选择框 → 展开判断口径 → 切脱敏 → 滚到底。
+  每一步都截图，并顺手量了 DOM 规模、渲染耗时、滚动高度、可聚焦元素数。<b>然后真的扫了一次 <code>D:\AI_Projects</code>（48 万文件）</b>，把进行中那一屏也录下来了。</p>
+</div>
+
+<h2><span class="n">02</span>好的地方：这几点是真做得好</h2>
+
+<h3>2.1 一打开就知道要干嘛，而且默认就替你想了隐私</h3>
+
+<p>页面加载完，<b>「选择文件夹」弹窗是自动弹出来的</b>（实测 <code>选择框是否自动弹出 = true</code>）。不用找、不用猜。快选里有 C:/D:/E:/F: 四个盘，还有桌面/下载/文档/视频/图片五个常用位置。</p>
+
+<p>更值得说的是：<b>「脱敏」默认是开的，而且是"路径"这一档</b>。标题栏那个 <code>C:\Users\***\Downloads</code> 就是它干的。写这个工具的人显然想过"这东西会被截图发出去"。</p>
+
+<img class="shot" src="shots/00-首次打开-自动弹出选择文件夹.png" alt="首次打开">
+<p class="cap">首次打开。弹窗自动出现，路径里用户名已经被 <code>***</code> 盖掉。背景里那条红字是我这次测试没给服务传密钥造成的，不是你正常使用会看到的东西（<code>start.bat</code> 会从 <code>key.txt</code> 读进去）。</p>
+
+<h3>2.2 扫描过程透明得有点不像个人项目</h3>
+
+<p>这是全场我最服气的一屏。扫描时它不是转一个圈了事，而是实时告诉你：</p>
+
+<div class="card good">
+  <div class="kv">
+    <span>正在读文件到第几个、多快</span><span class="v">138,897 个　98,927/秒</span>
+    <span><b>此刻正在读哪个目录</b>（这个最狠）</span><span class="v">s-sdk\nested-clients\dist-es\...\sts\commands</span>
+    <span>第二阶段进度</span><span class="v">第2关/4 · 判类别 45/67</span>
+    <span>已经花了多少 token、多少钱</span><span class="v">JEV 调用 8 次 / 39,431 token ≈ $0.001656</span>
+    <span>跳过了多少目录联接</span><span class="v">跳过 6,724 个链接（指向的内容不重复统计）</span>
+  </div>
+  <p style="margin:12px 0 0;font-size:13px;color:var(--tx2)">「当前正在读哪个目录」这一条我在商业磁盘工具里没见过。它不是功能，是<b>态度</b>——它在证明自己真在干活，而不是卡住了。</p>
+</div>
+
+<img class="shot" src="shots/22-扫描中-3.png" alt="扫描进行中">
+<p class="cap">扫描进行中。上面那条<b>琥珀色横幅</b>和下面这张卡其实在说同一件事的两个不同时间点（第 1 关 vs 第 2 关），这是后面第 3 节要说的毛病之一。</p>
+
+<h3>2.3 它不按"分数"组织，按"你要做什么"组织</h3>
+
+<p>清单只有三组，顺序固定：<b>可以删 → 先看一眼 → 建议不清理</b>。可删的永远在最上面。</p>
+
+<p>这个选择是对的。市面上大多数工具给你一个"垃圾 12.3 GB"，然后你自己去猜哪些能动。它反过来：<b>先替你分好"哪些能碰"，再把证据摊开。</b>而且「先看一眼」不是和稀泥——低把握、两类之间摇摆、超大件才会掉进去，逻辑在 <code>index.html:340-345</code>，写得很清楚。</p>
+
+<h3>2.4 「④ 待确认」是最好的一屏</h3>
+
+<p>低把握的条目在这里<b>用红色跳出来</b>，还各配一句人话解释：</p>
+
+<ul>
+  <li><code>temp</code> · <span class="tag t-p0">把握只有 0.07</span></li>
+  <li><code>2603amd比赛</code> · <span class="tag t-p1">它自己也在犹豫</span> —— 在「程序本体」和「构建产物」之间摇摆</li>
+  <li><code>dsh便携版测试</code> · <span class="tag t-p1">它自己也在犹豫</span> —— 在「构建产物」和「程序本体」之间摇摆</li>
+</ul>
+
+<p>上面还有一句红底说明，把整屏的定位讲死了：<b>「107 项需要你自己看一眼——模型没把握、在两类之间摇摆，或者是超大件。它们不属于『可以删』（工具不替你打包票），也不属于『建议不清理』。」</b></p>
+
+<p>这屏就是这工具真正的差异化。<b>「我不确定」被当成一等公民，还给了独立的版面。</b>绝大多数 AI 工具会把不确定藏起来。</p>
+
+<img class="shot" src="shots/09-待确认页.png" alt="待确认页">
+<p class="cap">④ 待确认页。左边红色数字是把握度，右边琥珀色小标签告诉你"为什么它不敢下结论"。<b>颜色在这里是活的</b>——这很重要，第 3.6 条会说到同一套颜色在清单页为什么失效。</p>
+
+<h3>2.5 成本这一个数字，就够它站住</h3>
+
+<div class="cmp">
+  <div class="a"><span class="h">48 万文件</span>12 次调用<br>64,087 token<br><b>$0.0027</b><br>12.9 秒</div>
+  <div class="a"><span class="h">119 万文件（D 盘全盘）</span>46 次调用<br>278,562 token<br><b>$0.0117</b></div>
+  <div class="a"><span class="h">158 文件（小目录）</span>4 次调用<br>6,806 token<br><b>$0.00029</b></div>
+</div>
+
+<p>一次全盘体检一分钱。这个数字应该被印在首屏——它是"本地工具 + 云端判断"这条路线最有说服力的证据。</p>
+
+<h3>2.6 零报错</h3>
+<p>15 个交互步骤跑完，<b>控制台异常 0 条</b>。长会话、多次重绘、切页签、重排序，没有一次 JS 报错。这个基本功是扎实的。</p>
+
+<h2><span class="n">03</span>卡住的地方：按"会不会真耽误你"排序</h2>
+
+<p class="q">严重度只看两件事：① 会不会让你当场判断错；② 会不会在懂行的人面前露怯。</p>
+
+<h3><span class="tag t-p0">P0</span> 3.1 同一个屏幕上，调用次数和 token 数有两套值</h3>
+
+<p>扫描跑完那一刻，屏幕上同时出现两个不同的数：</p>
+
+<div class="cmp">
+  <div class="b"><span class="h">进度条上方那行明细</span><code>JEV 调用 12 次 / 64,087 token</code></div>
+  <div class="b"><span class="h">状态栏里的阶段文字</span><code>180 条归并成 67 类，只判了 12 次</code></div>
+  <div class="c"><span class="h">表格下方脚注</span><code>JEV 11 次调用 · 60.1k token</code></div>
+</div>
+
+<p>我把这次扫描的缓存文件打开对了真值：</p>
+
+<div class="card">
+  <div class="kv">
+    <span>缓存里的真值（<code>20260920-160239.json</code>）</span><span class="v">"requests": 12　"input_tokens": 64087</span>
+    <span>明细行</span><span class="v">12 次 / 64,087 ✓ 对</span>
+    <span>阶段文字</span><span class="v">12 次 ✓ 对</span>
+    <span>脚注</span><span class="v">11 次 / 60.1k ✗ 少了一次</span>
+  </div>
+</div>
+
+<p>根因不是算错了，是<b>渲染顺序错了</b>。<code>index.html</code> 的 <code>poll()</code> 里（L512-573）：它先更新界面上的文字，<b>之后</b>才把这一轮新拿到的 <code>USAGE</code> / <code>DEDUP</code> / <code>SCAN_STATS</code> 存下来（L558-561）。而表格下方的脚注只在"这一轮有新条目"时才会重画（L517-522）。所以最后一次轮询拿到了最终数字，但脚注拿到的是上一轮的值——<b>脚注永远慢一拍</b>。</p>
+
+<p>为什么这条排第一：<b>你上一轮刚修掉一个"类数当成请求次数"的 bug，就是同一类病症。</b>同一个项目里同一个病复发，说明修的是症状不是病根。而且这次是"真值 12、脚注 11"，差 1 次——不像上次差得那么离谱，反而更容易被当成"四舍五入"糊过去。</p>
+
+<h3><span class="tag t-p0">P0</span> 3.2 "482,808 个文件 → 判 180 条"——中间那步不见了</h3>
+
+<p>同一屏的概要行，在两次不同的载入方式下长得不一样：</p>
+
+<div class="cmp">
+  <div class="a"><span class="h">从缓存回放（D 盘）</span><code>1,186,888 个文件 → 归并 243 类 → 判 2000 条</code><br><span style="color:var(--tx3)">三步齐全</span></div>
+  <div class="c"><span class="h">刚扫完（AI_Projects）</span><code>482,808 个文件 → 判 180 条</code><br><span style="color:var(--tx3)">"归并 67 类"没了</span></div>
+</div>
+
+<p>而缓存里的真值是 <code>"classes": 67, "dedup_saved": 113</code>——这个 67 是实实在在算出来的，只是没显示出来。<b>同一个根因</b>：<code>DEDUP</code> 到得太晚，概要行已经画完了，不再重画。</p>
+
+<p>为什么可惜：<b>"180 条归并成 67 类"是这个工具省钱的全部秘密</b>，也是它跟"把每个文件都丢给大模型"最本质的区别。<code>dedup_saved: 113</code>——省掉了 113 次调用。这么漂亮的数字，你只在<b>回放旧缓存</b>时才看得到，刚扫完反而看不到。这让新用户第一次使用时，正好错过了你最想让人看到的那一步。</p>
+
+<h3><span class="tag t-p0">P0</span> 3.3 「按落点」那一格，扫 D 盘时是一根 100% 的柱子</h3>
+
+<img class="shot" src="shots/07-构成页.png" alt="构成页">
+<p class="cap">② 构成页。<b>左半边很漂亮，右半边废了。</b>标题写着"空间往往被一个目录吃掉"，下面只有 <code>D:</code> 一根 100% 的柱子。最后那句"一句话洞察"因此变成废话："187.68 GB 里有 63.44 GB 是程序本体，其中最大的一块堆在 D:。"——废话，本来就在扫 D 盘。</p>
+
+<p>原因是 <code>renderCompose()</code>（<code>index.html:759-764</code>）在算"落点"时，剥掉的是<b>用户主目录 HOME</b>（<code>C:\Users\<user></code>），而不是<b>本次扫描的根目录</b>。所以：</p>
+
+<ul>
+  <li>扫主目录里的东西 → 正常，能看出是 Downloads 还是 Documents 吃掉了空间；</li>
+  <li>扫 C 盘以外的任何盘（D/E/F）→ <b>所有条目都归到"D:"这一格</b>，全是 100%。</li>
+</ul>
+
+<p>这条排 P0，是因为它出现在<b>你打开的第二屏</b>，而且是"看起来在工作、实际上什么都没说"的那种坏。<b>用户不会报错，只会觉得这个功能没用。</b></p>
+
+<h3><span class="tag t-p0">P0</span> 3.4 脱敏开到最大档，展开路径还是把文件名漏出来</h3>
+
+<p>「脱敏」有三档：关 / 路径 / 路径＋文件名。开到最大档，名字列确实打码了：</p>
+
+<div class="cmp">
+  <div class="a"><span class="h">名字列（已打码）</span><code>Git-•••.exe</code></div>
+  <div class="c"><span class="h">展开后的完整路径（没打码）</span><code>D:\Backup\XWeChat_files_net\<br>wxid_****\<br>msg\file\2022-07\<br>Git-2.28.0-64-bit.exe</code></div>
+</div>
+
+<p>我把两个值一起抓出来的（<code>首行名字 = "Git-•••.exe"</code>、<code>首行路径 = "...Git-2.28.0-64-bit.exe"</code>），不是猜的。</p>
+
+<p>代码上很清楚：打码有两个函数。<code>maskName()</code> 会盖住文件名的中间（<code>index.html:379-387</code>），但<span class="hi">只管名字列</span>；<code>mask()</code> 只把主目录里的用户名换成 <code>***</code>（<code>index.html:378</code>）。而展开出来的路径用的是 <code>mask(it.path)</code>（<code>index.html:723</code>）——<b>它没经过 <code>maskName</code>，所以最后那段文件名原封不动。</b></p>
+
+<p>为什么这条对你特别要紧：<b>你的用途正是录屏和截图发出去。</b>而且泄露的不只是一个文件名——上面那串里有个 <code>wxid_****</code>，那是微信账号 ID。工具建了一个专门防这个的开关，用户开了最大档、以为安全了，结果一展开路径就漏。<b>一个让人产生虚假安全感的安全开关，比没有这个开关更危险。</b></p>
+
+<h3><span class="tag t-p1">P1</span> 3.5 清单的尾巴是纯噪声，而你没给它出口</h3>
+
+<p>这是"顺不顺手"最要命的一条。D 盘 2000 条的结果，实测：</p>
+
+<div class="card">
+  <div class="kv">
+    <span>列表可视高度</span><span class="v">560 px</span>
+    <span>内容实际高度</span><span class="v">68,094 px</span>
+    <span><b>要滚多少屏才到底</b></span><span class="v">122 屏</span>
+    <span>其中「建议不清理」占</span><span class="v">1870 / 2000 = 93.5%</span>
+    <span>真正要你处理的</span><span class="v">130 项（6.5%）</span>
+    <span>有没有筛选框 / 折叠分组</span><span class="v">没有（分组条 cursor = auto）</span>
+  </div>
+</div>
+
+<p>滚到底那 16 行是这样的：</p>
+
+<img class="shot" src="shots/04-主列表-滚到底.png" alt="滚到底">
+<p class="cap">第 1985–2000 行。全是 <code>1 MB</code>（因为显示精度只到 MB，1.0–1.5 MB 全挤成"1 MB"）、全是「用户产出」、把握度 0.86–0.99。而且同一个文件重复出现好几遍——三行一样的 <code>申论8：文章写作题（文章的结构）.pdf</code>、两行一样的 <code>base.apk.1</code>、两行一样的 mp4。</p>
+
+<p>两个问题叠在一起：</p>
+
+<ol>
+  <li><b>没有收敛手段。</b>你知道 1870 条不用管，但界面不让你把它收起来。分组条是个死元素（不是按钮），没有筛选框，没有搜索。<b>一个"帮你做决定"的工具，最后让你滚 122 屏做决定。</b></li>
+  <li><b>重复条目看不出是重复的。</b>同一个类里的两条在界面上长得一模一样，因为"同签名 N 条一并判定"这句只写在 <b>hover 提示</b>里（<code>index.html:367</code>）。另一个字段 <code>is_rep</code>（这条是不是这一类的代表）算出来了，但<b>整个前端一次都没用到</b>——我全文搜过，只有 <code>class_size</code> 出现在 tooltip 里。</li>
+</ol>
+
+<p>顺带一个反直觉的好消息：<b>2000 行全量渲染的性能其实没问题。</b>实测 DOM 里 2000 个 <code>.tr</code>、整页 21,153 个节点、单次 <code>render()</code> 27–35 ms。原来我担心"没有虚拟滚动会卡"，实测<b>这个担心是多余的</b>，2000 条这个量级不用改。真正的问题不是性能，是<b>信息没被收拢</b>。</p>
+
+<h3><span class="tag t-p1">P1</span> 3.6 「按把握」排序只在一组之内生效，但列头承诺了全局</h3>
+
+<p>「把握」列头的原文提示是（实测抓取）：</p>
+
+<p style="margin-left:16px"><code>JEV 自报的把握度 —— 点这列排序，没把握的会浮上来</code></p>
+
+<p>我点了。结果是：</p>
+
+<div class="card">
+  <div class="kv">
+    <span>点完后前 12 行的把握度</span><span class="v">0.60 0.60 0.60 0.60 0.60 0.60 0.61 0.65 0.66 0.66 0.67 0.67</span>
+    <span>全列表最小的那一条（0.07）在第几行</span><span class="v">第 24 行</span>
+  </div>
+</div>
+
+<p>为什么？因为排序是<b>先按动作分组、组内再按列</b>（<code>index.html:656-666</code>）。「可以删」那 23 条的最低把握就是 0.60（这是设计好的门槛，低于 0.6 会自动掉进「先看一眼」）。所以<b>列头那句"没把握的会浮上来"只在组内成立。</b></p>
+
+<p>我得说句公道话：<b>分组优先是对的设计</b>，比全局按把握排更有用。问题只在提示文案写大了。"没把握的会浮上来"这句承诺，用户一点就会发现没兑现——<b>那 0.07 没上来，它躺在第 24 行。</b>把这句改成"组内按把握排"就没事了。</p>
+
+<p>顺带一提：低把握的红色在 ④ 页是活的，在①页却几乎看不到——因为凡是低于 0.6 的都被挪进了「先看一眼」，而①页首屏显示的是「可以删」，那 23 条的把握度全在 0.60–0.75 之间。<b>同一套颜色语言，在最重要的那一屏是哑的。</b>这不算错，但值得知道。</p>
+
+<h3><span class="tag t-p1">P1</span> 3.7 「载入上次结果」永远只载最新那一份</h3>
+
+<p>实测：按钮只做两件事——取缓存目录里<b>按文件名倒序的第一份</b>，然后载入它。</p>
+
+<pre style="background:var(--surf);padding:12px;border-radius:8px;overflow:auto;font-size:12px;margin:14px 0"><code>const c = await jget("/api/caches");
+const r = await jget("/api/replay?file=" + encodeURIComponent(c.caches[0]));
+</code></pre>
+
+<p>而我数了一下那个目录：<b>20 份缓存文件躺在那里</b>，从凌晨 2 点到下午 4 点，覆盖 Downloads、E 盘、D 盘、whisper_models。你只能拿到最后那一份，没有任何选择界面（实测 <code>有没有让用户挑哪份缓存 = false</code>）。</p>
+
+<p>对录屏这件事，这一条特别不友好：<b>你没法挑一份"最好看"的历史结果来讲。</b>必须现场重扫一次，或者把最新的那份换成你要的那份。而 20 份缓存本身说明——你是真的在用这个工具反复扫，这个需求是真实的。</p>
+
+<h3><span class="tag t-p2">P2</span> 3.8 三处小状态不对</h3>
+
+<ul>
+  <li><b>扫描中，表格里写着"选个文件夹 → 开始扫描"。</b>实测扫描进行到 11.6 秒时，空表区域的文案还是这句——你刚点完扫描，它让你去点扫描。</li>
+  <li><b>点了「中止」，进度条归 0%。</b>实测中止后 <code>进度条宽 = "0%"</code>，但阶段文字明明是"已中止（用户中止）· 读到 158,870 个文件"。进度条归零读起来像"从头开始了"，而不是"停下来了"。根因在 <code>index.html:523-526</code>：中止时 <code>total_entries</code> 为空，算出来就是 0，而"正在扫描/判断时兜底给 12%/40%"那两个分支不覆盖 <code>cancelled</code> 状态。</li>
+  <li><b>扫描跑完后，整个列表被刷成"新加入"的绿色。</b>实测 <code>有闪烁行 = 180</code>，而且完成 15 秒后还是 180。这个绿色高亮的本意是"只标刚出来的那几行、700 毫秒后失效"，但扫描结束后不再重绘，最后一轮给 180 条全打上了、再也没清掉。<b>信号全开等于没有信号。</b></li>
+</ul>
+
+<h3><span class="tag t-p2">P2</span> 3.9 键盘和读屏：基本是零</h3>
+
+<div class="card">
+  <div class="kv">
+    <span>带 <code>tabindex</code> 的元素</span><span class="v">0 个</span>
+    <span>带 <code>role</code> / <code>aria-*</code> 的元素</span><span class="v">0 个</span>
+    <span>绑定了 <code>onkeydown</code></span><span class="v">没有</span>
+    <span>可聚焦控件</span><span class="v">53 个（全是原生按钮/输入）</span>
+  </div>
+</div>
+
+<p>意思是：键盘用户只能 Tab 一个个过 53 个按钮，<b>列表里的行、列、分组条，键盘一个都碰不到</b>。方向键、Enter、Esc、快捷键，一个都没有。列表还带右键菜单，而右键菜单在键盘上等于不存在。</p>
+
+<p>对"个人工具 + 录屏演示"来说这不是致命伤，但它是<b>明确的空白</b>，而不是"可以以后再说"。而且顺带一个真实的小损失：<b>右键菜单里的「打开这个文件夹」「复制完整路径」没有任何视觉入口</b>（列表里没有任何提示说"可以右键"）。不右键的人永远发现不了这两个功能。</p>
+
+<h3><span class="tag t-p2">P2</span> 3.10 一些小毛刺</h3>
+
+<ul>
+  <li>④ 页的「类别」列会把「可再生缓存」折成两行，① 页不会——同一套五列网格，两处的换行规则不一致。</li>
+  <li>「脱敏」对短名字很无力：目录名 <code>cache</code> 只有 5 个字符，打码后是 <code>cach•••</code>——<b>泄露了 4 个字符里的 4 个</b>。</li>
+  <li>扫描时同时出现两个进度读数：琥珀横幅说"第1关/4 · 认名字 67/67 · 10.1s"，下面卡片说"第2关/4 · 判类别 45/67"。同屏两个"当前阶段"，两个都自称是当前。</li>
+  <li>同时有两个中止按钮：标题栏的「中止」和横幅里的「全部中止」，文案不同、行为范围不同（一个停当前、一个停全部），但看不出区别。</li>
+</ul>
+
+<h2><span class="n">04</span>量化对照表（一屏看完）</h2>
+
+<table>
+  <thead><tr><th>指标</th><th>实测值</th><th>我的判断</th></tr></thead>
+  <tbody>
+    <tr><td>首次打开到能用</td><td class="num">弹窗自动出现，0 次点击</td><td><span class="tag t-ok">好</span></td></tr>
+    <tr><td>扫描 48 万文件总耗时</td><td class="num">12.9 s</td><td><span class="tag t-ok">好</span></td></tr>
+    <tr><td>扫描钱</td><td class="num">$0.0027</td><td><span class="tag t-ok">很好</span></td></tr>
+    <tr><td>我独立遍历同一目录</td><td class="num">3.83 s / 12.6 万文件每秒</td><td>与它同量级，没吹</td></tr>
+    <tr><td>2000 行渲染耗时</td><td class="num">27–35 ms</td><td><span class="tag t-ok">不是问题</span></td></tr>
+    <tr><td>2000 行 DOM 节点</td><td class="num">21,153</td><td>可接受</td></tr>
+    <tr><td>滚到底要几屏</td><td class="num">122 屏</td><td><span class="tag t-p0">真问题</span></td></tr>
+    <tr><td>分组条 / 筛选 / 搜索</td><td class="num">都没有</td><td><span class="tag t-p0">真问题</span></td></tr>
+    <tr><td>控制台异常（15 步）</td><td class="num">0</td><td><span class="tag t-ok">好</span></td></tr>
+    <tr><td>tabindex / aria / 快捷键</td><td class="num">0 / 0 / 无</td><td><span class="tag t-p0">空白</span></td></tr>
+    <tr><td>同屏自相矛盾的数字</td><td class="num">至少 3 处</td><td><span class="tag t-p0">最伤</span></td></tr>
+    <tr><td>D 盘真正要处理的占比</td><td class="num">130 / 2000 = 6.5%</td><td>价值密度低是这类工具的宿命</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">05</span>它其实不是"清理工具"</h2>
+
+<p>跑完两轮我有个想法，写下来给你参考。</p>
+
+<p>你扫 D 盘 187 GB，它说"可以删 9.40 GB"，占 5%。扫 AI_Projects 22.5 GB，说"可以删 365 MB"，占 1.6%。<b>如果你按"腾出多少空间"来评价，这工具的产出是可怜的。</b></p>
+
+<p>但它干了另一件事：它把 187 GB 的构成摊开给你看——63 GB 程序本体、58 GB 应用状态、51 GB 用户产出，然后把 2000 条逐个标了类别和把握度，告诉你哪 130 条值得看。</p>
+
+<p><b>这不是清理工具，这是体检报告。</b>清理工具承诺"帮你减掉 20 GB"，体检报告承诺"让你知道这 187 GB 是什么"。前者的价值随可删比例下降而消失，后者的价值不依赖这个比例。</p>
+
+<p>而这恰好解释了它为什么会主动建一个「④ 待确认」页——<b>一个清理工具不需要"我不确定"这一栏，一个报告需要。</b></p>
+
+<p>所以我对它的期待是：<b>别往"多删点"的方向走。</b>它的定位已经比那个高，硬去比"能删多少"反而会掉进自己反对的那条路（"反 360"那套）。真该加的是"把不确定说清楚"的能力——比如让用户能对某一条说"这个我知道是什么"，然后看它怎么改判。这在已有架构上是一个小改动，但会把工具从"看一遍"变成"用起来"。</p>
+
+<h2><span class="n">06</span>体验评分</h2>
+
+<p class="q">这一轮全部按"用起来"打分，不按代码正确性。每项满分 10。</p>
+
+<div class="score">
+  <div class="row"><div>第一眼印象 / 上手成本</div><div class="s">8.5</div>
+    <div class="why">开页面自动弹选择框、脱敏默认开、路径栏一眼看懂。扣在没有空态引导——关掉弹窗不选目录，页面就静静躺着，四个卡全是"—"（实测 <code>#shown</code> 文案为空串）。</div></div>
+  <div class="row"><div>扫描过程的可感知度</div><div class="s">9.0</div>
+    <div class="why">实时文件数 / 速度 / <b>当前正在读的目录</b> / 链接跳过数 / 实时花费。全场最强。扣在同屏两个"当前阶段"打架，和中止后进度条归零。</div></div>
+  <div class="row"><div>结果页的信息设计</div><div class="s">8.0</div>
+    <div class="why">按"你要做什么"分三组、可删永远在最上、分组条贯通五列对齐得很讲究。扣在 93.5% 的噪声没有出口，以及重复条目看不出重叠。</div></div>
+  <div class="row"><div>做决定的顺畅度</div><div class="s">6.5</div>
+    <div class="why">证据齐全（类别 / 把握 / 四档损失分布 / 分层 tooltip），但你要在 122 屏里做决定，还不能筛、不能折叠、不能搜索。工具替你判断了，但没替你收拢。</div></div>
+  <div class="row"><div>细节一致性</div><div class="s">6.0</div>
+    <div class="why">同一屏 11 vs 12 次、60.1k vs 64.1k；概要行少一步；「按落点」失效；脱敏在路径上失效；列头承诺没兑现。都是小地方，但密集，而且集中在"数字"和"隐私"这两类最不该出错的地方。</div></div>
+  <div class="row"><div>边界与责任</div><div class="s">9.0</div>
+    <div class="why">「我判不出的」有独立版面；低把握自动降级；工具不给自己打包票的那一条，恰恰是它最可信的地方。这是产品的骨气。</div></div>
+  <div class="row"><div>可访问性</div><div class="s">2.5</div>
+    <div class="why">tabindex 0、aria 0、无快捷键、右键菜单无键盘入口。对个人录屏工具不致命，但是实实在在的空白。</div></div>
+  <div class="tot"><span>合计</span><span><b>49.5</b> / 70 ≈ <b>71%</b></span></div>
+</div>
+
+<p style="margin-top:22px">这个分数不算低。但我想把话说准一点：<b>它的分数不是均匀撒开的，是两头的。</b>设计判断（9.0）、透明（9.0）、上手（8.5）都很好；细节一致性（6.0）和可访问性（2.5）拖得很低。</p>
+
+<p>这种分布说明一件事：<b>这个项目的"想清楚"做得比"抠干净"多。</b>对一个 MVP 来说这是对的顺序。但 3.1 和 3.4 这两条已经不是"没抠干净"了——一条会让人怀疑你的数字，一条会让人误以为自己安全。</p>
+
+<h2><span class="n">07</span>如果只改三件事</h2>
+
+<div class="card warn">
+  <h3 style="margin-top:0">第一件：把渲染顺序掰正（改 3 行，一次修好 3.1 + 3.2 + 3.8 第三条）</h3>
+  <p>在 <code>poll()</code> 里，把"存 <code>USAGE</code>/<code>DEDUP</code>/<code>SCAN_STATS</code>"这几行（<code>index.html:558-561</code>）挪到 <code>render()</code> <b>之前</b>；并且让最后一轮（state 变成 done/cancelled 的那一轮）无条件重画一次表格和脚注。</p>
+  <p style="margin-bottom:0"><b>性价比最高的一刀。</b>它同时消灭"11 vs 12"、"少一步归并"、"绿色高亮清不掉"三个问题，因为它们本来就是同一个根因。<b>你上一轮修的是同一个病的另一个症状——这次修根。</b></p>
+</div>
+
+<div class="card warn">
+  <h3 style="margin-top:0">第二件：让清单能收起来（这是"好不好用"的分水岭）</h3>
+  <p>最小版本：分组条变成可点，点一下折叠该组（默认把「建议不清理」折叠起来，显示"1870 项 · 152.27 GB　展开"）。</p>
+  <p style="margin-bottom:0">第二步：加一个筛选（只看「可以删」/ 只看把握&lt;0.6 / 只看某类别），再给清单加一个搜索框。做完这两步，"122 屏"这个数字在体验上就直接消失了——用户看到的永远是几十行。</p>
+</div>
+
+<div class="card warn">
+  <h3 style="margin-top:0">第三件：把脱敏补全，并且让它敢承诺</h3>
+  <p>展开的完整路径也要过 <code>maskName()</code>（<code>index.html:723</code>）。另外把打码强度做成配置项——现在 <code>MASK_KEEP = 4</code>，对 <code>cache</code> 这种 5 字符名字等于没打。</p>
+  <p style="margin-bottom:0">再进一步：给一个"截图模式"的自检——打开时扫一遍页面上所有可见文本，凡是命中隐私词表（<code>PRIV_PAT</code> 已经存在）的，在角上给一个警告条。<b>你手上已经有 <code>privacy</code> 字段和「隐私?」角标了（D 盘那次真的标出了 4 条），把这套东西反向用在"检查我自己漏没漏"上，是很自然的延伸。</b></p>
+</div>
+
+<p style="margin-top:24px">排在后面的（按顺序）：<b>按落点改成剥扫描根</b>（一行）→ <b>列头提示改成"组内按把握排"</b>（一行）→ <b>缓存选择器</b>（一个小列表）→ <b>空态文案区分"没选"和"扫描中"</b>（一行）→ <b>中止后进度条保持最后一格而不是归零</b>（一行）。</p>
+
+<h2><span class="n">08</span>我没验证到的（说清楚，不装）</h2>
+
+<ul>
+  <li><b>没有真实键盘操作。</b>我是程序化点击的，没测 Tab 顺序、焦点陷阱、屏幕阅读器。所以"键盘零支持"是从 0 个 <code>tabindex</code>/<code>aria</code> 推出来的结论，不是亲手摸出来的体验。</li>
+  <li><b>没测 Chrome/Safari/Firefox。</b>全是 Edge（Chromium 内核）跑的。<code>navigator.clipboard</code>、<code>document.execCommand("copy")</code> 这种有降级分支的地方我只看了代码，没实测复制成功。</li>
+  <li><b>没测无权限目录、断网、key 失效</b>这三种真实故障在界面上的表现。上一轮代码层面覆盖过，但"用户看到什么"我没看到。</li>
+  <li><b>并发多任务只看到界面，没压测。</b>我实测到了"后台还有 1 个任务在跑"这条横幅和「全部中止」按钮，但没真的同时跑两个扫描。</li>
+  <li><b>扫描进行中我是靠定时抓取的，可能有看不到的瞬态。</b>例如某个中间态只存在几百毫秒，我就漏了。</li>
+</ul>
+
+<div class="card info" style="margin-top:34px">
+  <b>一句话总结</b>
+  <p style="margin:8px 0 0">
+    这东西的设计比市面上大多数商业清理软件高一档，扫描过程透明到我挑不出第二家，
+    成本低到可以忽略。<b>它现在最缺的不是功能，是把已有的东西收口——数字要一致，隐私要真守住，清单要能收起来。</b>
+    这三件修完，它就从"一个有意思的 demo"变成"我愿意装在自己电脑上的工具"。
+  </p>
+</div>
+
+<p class="q" style="margin-top:34px">
+  评查方式：本地起服务（端口 8849）→ Edge 无头 + CDP 驱动，15 步交互逐屏截图 → 真实扫描 <code>D:\AI_Projects</code>（482,808 文件）录制全过程 → 缓存 JSON 与 <code>/api/jobs</code> 接口对真值。<br>
+  项目文件全程只读（唯一落盘副作用是扫描本身写入的 <code>cache/20260920-160239.json</code>，可随时删）。所有截图在 <code>shots/</code> 目录。
+</p>
+
+</div>
+</body>
+</html>

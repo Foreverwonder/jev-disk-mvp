@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JEV 硬盘体检</title>
+<style>
+:root{
+  --bg:#FBFAF7; --card:#FFFFFF; --surf:#F1EFE8; --line:#E4E1D8; --line2:#D3D1C7;
+  --tx:#2C2C2A; --tx2:#5F5E5A; --tx3:#8A8880;
+  --green:#1D9E75; --green-bg:#E1F5EE; --green-tx:#085041;
+  --blue:#378ADD; --blue-bg:#E6F1FB; --blue-tx:#0C447C;
+  --amber:#EF9F27; --amber-bg:#FAEEDA; --amber-tx:#854F0B;
+  --red:#E24B4A; --red-bg:#FCEBEB; --red-tx:#A32D2D;
+  --r:10px;
+}
+*{box-sizing:border-box}
+input,textarea{font:inherit;font-size:12px;padding:4px 8px;border:1px solid var(--line2);
+  border-radius:6px;background:#fff;color:var(--tx)}
+input:focus,textarea:focus{outline:none;border-color:var(--blue)}
+textarea{width:100%;resize:vertical;line-height:1.5}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:13px/1.55 "PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 20px 40px}
+button{font:inherit;font-size:12px;padding:5px 11px;border-radius:7px;
+  border:1px solid var(--line2);background:#fff;color:var(--tx2);cursor:pointer}
+button:hover{border-color:#9C9A90;color:var(--tx)}
+button.on{border-color:var(--green);background:var(--green-bg);color:var(--green-tx)}
+button.primary{background:var(--green);border-color:var(--green);color:#fff;font-weight:500}
+button.primary:disabled{background:#C9C7BF;border-color:#C9C7BF;cursor:default}
+button.tiny{padding:3px 8px;font-size:11px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
+h1{font-size:15px;font-weight:500;margin:0;display:inline}
+h2{font-size:13px;font-weight:500;margin:0 0 8px}
+h3{font-size:11px;font-weight:400;color:var(--tx2);margin:0 0 6px}
+.muted{color:var(--tx2)}
+.tiny{font-size:11px}
+.tx3{color:var(--tx3)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grow{flex:1}
+.hdr{padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.path{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--blue-tx);
+  background:var(--blue-bg);padding:3px 8px;border-radius:6px;max-width:420px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tabs{display:flex;gap:6px;padding:10px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}
+.metric{background:var(--surf);border-radius:8px;padding:10px 13px}
+.metric b{display:block;font-size:21px;font-weight:500;margin-top:2px}
+.ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;
+  border-bottom:1px solid var(--line)}
+.tbl{max-height:560px;overflow-y:auto}
+.th,.tr{display:grid;grid-template-columns:34px minmax(0,1fr) 78px 58px 104px;
+  gap:0;align-items:center;padding:0 14px}
+/* Excel 式网格：每个单元格自带左 padding + 右侧竖线 */
+.th>*,.tr>*{border-right:1px solid var(--line);padding:0 10px;overflow:hidden}
+.th>*:first-child,.tr>*:first-child{padding-left:0}
+.th>*:last-child,.tr>*:last-child{border-right:none;padding-right:0}
+.th{min-height:26px;font-size:11px;color:var(--tx2);background:var(--surf);
+  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;padding:5px 14px}
+.tr{min-height:34px;border-bottom:1px solid #F0EEE7}
+.tr.flash{background:#EAF7EF}
+/* 可点击表头 */
+.thc{cursor:pointer;user-select:none;white-space:nowrap}
+.thc:hover{color:var(--tx);text-decoration:underline;text-underline-offset:3px}
+.thc.act{color:var(--green-tx);font-weight:500}
+.car{font-style:normal;font-size:9px;margin-left:3px;opacity:.3}
+.thc.act .car{opacity:1;color:var(--green)}
+/* 分组条 —— 用和表格完全相同的五列网格，竖线贯通，数据对齐列头（组体积对齐体积列、平均把握对齐把握列）*/
+.grp{display:grid;grid-template-columns:34px minmax(0,1fr) 78px 58px 104px;gap:0;
+  align-items:center;padding:0 14px;border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
+.grp>*{border-right:1px solid var(--line);padding:0 10px;overflow:hidden}
+.grp>*:first-child{padding-left:0;border-right:none}
+.grp>*:last-child{border-right:none;padding-right:0}
+.grp .bl{font-size:13px;font-weight:500}
+.grp.b-删{background:#EAF7EF;color:#085041}
+.grp.b-看{background:#FDF4E3;color:#854F0B}
+.grp.b-留{background:#F4F3EF;color:#5F5E5A}
+/* 一句话摘要（取代四个长标签卡片） */
+.sum{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.sum>div{background:var(--surf);border-radius:9px;padding:11px 18px;min-width:132px}
+.sum h3{font-size:11px;color:var(--tx2);margin:0 0 3px;font-weight:400}
+.sum b{font-size:21px;font-weight:500;letter-spacing:-.2px}
+.sum .s-删{background:var(--green-bg)}.sum .s-删 b{color:var(--green-tx)}
+.sum .s-看{background:var(--amber-bg)}.sum .s-看 b{color:var(--amber-tx)}
+/* 行内那一个「为什么要你看一眼」的小标记 */
+.wchip{font-size:10.5px;padding:1px 6px;border-radius:4px;background:var(--amber-bg);
+  color:var(--amber-tx);white-space:nowrap;cursor:help}
+.nm{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev{font-size:10.5px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.bar{height:5px;border-radius:3px;background:#EFEDE6;overflow:hidden}
+.bar>i{display:block;height:100%}
+.mini{display:flex;height:3px;border-radius:2px;overflow:hidden;margin-top:3px;background:#EFEDE6}
+/* JEV 把握：每行一个 0.xx 数字 + 迷你条。
+   颜色语义是刻意的：高把握 → 灰（融进背景，不吵）；没把握 → 琥珀/红（自己跳出来）。
+   截图里每行都有数字 = 「AI 逐项评估过」的观感；但眼睛自然只落在低把握的行上。 */
+.conf{text-align:right;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.15}
+.conf>i{display:block;height:3px;border-radius:2px;margin-top:2px;background:#EFEDE6;overflow:hidden}
+.conf>i>b{display:block;height:100%;border-radius:2px;background:currentColor}
+.conf.hi{color:var(--tx3)}
+.conf.mid{color:var(--amber-tx)}
+.conf.lo{color:var(--red-tx);font-weight:600}
+/* 点名字展开完整路径（平时只显示省略后的文件名，列宽就不用让给长路径） */
+.cellname{cursor:pointer}
+.cellname .fullpath{display:none;font-family:ui-monospace,Consolas,monospace;
+  font-size:10.5px;color:var(--tx3);margin-top:3px;word-break:break-all;white-space:normal}
+.tr.openpath{background:#FBF7EC}
+.tr.openpath .cellname .fullpath{display:block}
+/* 右键菜单 */
+.ctxmenu{position:fixed;z-index:99;background:#fff;border:1px solid var(--line);
+  border-radius:9px;box-shadow:0 8px 28px rgba(35,33,30,.16);padding:4px;display:none;min-width:190px}
+.ctxmenu.show{display:block}
+.ctxmenu button{display:block;width:100%;text-align:left;background:none;border:0;
+  padding:7px 11px;font-size:12px;border-radius:6px;cursor:pointer;color:var(--tx1)}
+.ctxmenu button:hover{background:var(--blue-bg)}
+.ctxmenu .sep{height:1px;background:var(--line);margin:4px 6px}
+.big{display:grid;grid-template-columns:112px minmax(0,1fr) 74px 44px;gap:10px;align-items:center;padding:4px 0}
+.track{height:17px;border-radius:3px;background:var(--surf);overflow:hidden}
+.track>i{display:block;height:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.note{background:var(--surf);border-radius:8px;padding:10px 13px;margin-top:12px}
+.warnbox{border:1px solid #F1C9C9;background:var(--red-bg);border-radius:8px;padding:10px 13px}
+.mask{position:fixed;inset:0;background:rgba(35,33,30,.35);display:none;
+  align-items:center;justify-content:center;z-index:50}
+.mask.show{display:flex}
+.dlg{background:#fff;border-radius:14px;width:min(680px,94vw);max-height:86vh;
+  display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2)}
+.dlg .h{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:10px}
+.crumb{padding:9px 18px;border-bottom:1px solid var(--line);font-size:12px;color:var(--tx2);
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#FCFBF8}
+.crumb a{color:var(--blue-tx);cursor:pointer;text-decoration:none}
+.crumb a:hover{text-decoration:underline}
+.dlist{overflow-y:auto;padding:6px 10px;min-height:220px}
+.ditem{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;cursor:pointer}
+.ditem:hover{background:var(--surf)}
+.ditem .ic{width:14px;height:12px;border:1.4px solid #B4B2A9;border-radius:2px;flex:none}
+.dlg .f{padding:12px 18px;border-top:1px solid var(--line);display:flex;
+  align-items:center;gap:10px}
+.quick{display:flex;gap:6px;flex-wrap:wrap;padding:10px 18px 0}
+.foot{padding:11px 16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--tx3)}
+.proglist{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--tx3);
+  max-height:34px;overflow:hidden}
+.err{color:var(--red-tx);font-size:12px;white-space:pre-wrap}
+/* ── 清单出口：搜索 / 筛选 / 折叠（可用性修复轮） ── */
+.ltools{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ltools input{flex:0 0 220px;padding:5px 9px;border:1px solid var(--line);border-radius:6px;
+  font-size:12px;background:#fff;color:#2C2C2A;font-family:inherit}
+.ltools input:focus{outline:none;border-color:#85B7EB;box-shadow:0 0 0 2px var(--blue-bg)}
+#fltChips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11.5px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;
+  background:#fff;color:var(--tx3);cursor:pointer;font-family:inherit;white-space:nowrap}
+.chip.on{background:var(--blue-bg);border-color:#B5D4F4;color:var(--blue-tx)}
+.chip:hover{border-color:#85B7EB}
+.grp{cursor:pointer;user-select:none}
+.grp:hover{background:var(--blue-bg)}
+.grp.folded{opacity:.7}
+.grpcar{font-size:10px;color:var(--tx3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <div class="hdr">
+      <h1>JEV 硬盘体检</h1>
+      <span class="path" id="curPath">未选择</span>
+      <span class="grow"></span>
+      <button id="btnMask" class="on tiny">脱敏：路径</button>
+      <button id="btnPick">选择文件夹</button>
+      <button id="btnCancel" style="display:none">中止</button>
+      <button id="btnScan" class="primary">开始扫描</button>
+    </div>
+    <div class="tabs">
+      <button class="on" data-v="0">① 清单</button>
+      <button data-v="1">② 构成</button>
+      <button data-v="2">③ 年代</button>
+      <button data-v="3">④ 待确认</button>
+      <span class="grow"></span>
+      <button id="btnCache" class="tiny">载入上次结果</button>
+    </div>
+  </div>
+
+  <div class="sum" id="sum">
+    <div class="s-删"><h3>可以删</h3><b id="s1">—</b></div>
+    <div class="s-看"><h3>先看一眼</h3><b id="s2">—</b></div>
+    <div><h3>建议不清理</h3><b id="s3">—</b></div>
+    <div><h3>扫描了</h3><b id="s4">—</b></div>
+  </div>
+  <div id="foldHint" style="margin-bottom:10px">
+    <div class="tiny tx3" id="foldCalc"></div>
+  </div>
+
+  <div class="card" id="diffCard" style="display:none;margin:-4px 0 12px;border-color:#B5D4F4">
+    <div class="hdr" style="background:var(--blue-bg)">
+      <b style="font-weight:500;color:var(--blue-tx)">重判对比 —— 新口径 vs 旧口径</b>
+      <span class="grow"></span>
+      <button class="tiny" id="btnDiffBack">回到旧结果</button>
+    </div>
+    <div style="padding:10px 14px" id="diffBody"></div>
+  </div>
+
+  <div id="jobBar" style="display:none;margin:-4px 0 12px">
+    <div class="warnbox" style="border-color:#FAC775;background:var(--amber-bg)">
+      <div class="row">
+        <b style="font-weight:500;color:var(--amber-tx)" id="jobTx"></b>
+        <span class="grow"></span>
+        <button class="tiny" id="btnKillAll">全部中止</button>
+      </div>
+      <div class="tiny" id="jobList" style="margin-top:5px;color:var(--amber-tx)"></div>
+    </div>
+  </div>
+
+  <div class="card" id="statusBar" style="display:none">
+    <div style="padding:10px 14px">
+      <div class="row"><b id="stPhase" style="font-weight:500">准备中…</b><span class="grow"></span>
+        <span class="tiny tx3" id="stTime"></span></div>
+      <div class="bar" style="margin-top:7px"><i id="stBar" style="width:0%;background:var(--green)"></i></div>
+      <div class="proglist" id="stSub"></div>
+    </div>
+  </div>
+  <div class="card" id="errBar" style="display:none;margin-top:10px">
+    <div style="padding:12px 14px"><span class="err" id="errText"></span></div>
+  </div>
+
+  <!-- ① 处置 -->
+  <div class="card view" data-view="0" style="margin-top:0">
+    <div class="ltools">
+      <input id="q" placeholder="搜名字 / 路径 / 类别…" autocomplete="off" spellcheck="false">
+      <span id="fltChips">
+        <button class="chip on" data-act="all" title="恢复成全部">全部</button>
+        <button class="chip on" data-act="删">可以删</button>
+        <button class="chip on" data-act="看">先看一眼</button>
+        <button class="chip on" data-act="留">建议不清理</button>
+      </span>
+      <span class="grow"></span>
+      <button class="chip on" id="grpToggle"
+        title="按「该做什么」分组；关掉就按当前列全局排序">按动作分组</button>
+      <span class="tiny tx3" id="listCnt"></span>
+    </div>
+    <div class="tbl" id="tbl">
+      <div class="th">
+        <span>#</span>
+        <span>对象</span>
+        <span class="thc" data-k="size" style="text-align:right">体积<i class="car"></i></span>
+        <span class="thc" data-k="conf" title="JEV 自报的把握度。默认按「该做什么」分组，点这列是在**组内**排序 —— 想看全局最小把握，把右边「按动作分组」关掉" style="text-align:right">把握<i class="car"></i></span>
+        <span class="thc" data-k="kind">类别<i class="car"></i></span></div>
+      <div id="rows"></div>
+    </div>
+    <div class="foot">
+      <div id="shown"></div>
+      <div class="tiny tx3" id="foot2" style="margin-top:6px"></div>
+      <div id="truncNote" style="display:none;margin-top:6px;color:var(--amber-tx)"></div>
+    </div>
+  </div>
+
+  <!-- ② 构成 -->
+  <div class="card view" data-view="1" style="display:none;margin-top:12px">
+    <div style="padding:14px 16px">
+      <h2>空间被什么吃掉了</h2>
+      <div class="grid2">
+        <div><h3>按类别 — 别的清理工具只有「垃圾 / 非垃圾」</h3><div id="byKind"></div></div>
+        <div><h3>按落点 — 空间往往被一个目录吃掉</h3><div id="byLoc"></div></div>
+      </div>
+      <div class="note" id="insight"></div>
+    </div>
+  </div>
+
+  <!-- ③ 年代 -->
+  <div class="card view" data-view="2" style="display:none;margin-top:12px">
+    <div style="padding:14px 16px">
+      <h2>什么时候攒下来的</h2>
+      <div id="byYear"></div>
+      <div class="note tiny">
+        改动时间只当「加分」—— 越久没动过越想删。绝不会因为「最近动过」就保护起来：
+        活跃的缓存目录一直在被程序改写，mtime 很新，但它照样该删。
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 我不确定 -->
+  <div class="card view" data-view="3" style="display:none;margin-top:12px">
+    <div style="padding:14px 16px">
+      <h2>我不知道这些是什么</h2>
+      <div id="unsure"></div>
+    </div>
+  </div>
+
+  <!-- 判断口径 -->
+  <div class="card" style="margin-top:12px;border-color:#B5D4F4">
+    <div class="hdr" style="background:var(--blue-bg)">
+      <b style="font-weight:500;color:var(--blue-tx)">判断口径</b>
+      <span class="tiny" style="color:var(--blue-tx)">每次调用 JEV 时，喂给它的全部问题与选项</span>
+      <span class="grow"></span>
+      <button class="tiny" id="btnCrit">展开</button>
+    </div>
+    <div id="critBox" style="display:none;padding:12px 16px"></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="foot">
+      <div class="row">
+        <span class="grow">
+          全程只读，没有任何删除入口 · 判断与把握来自 JEV，依据来自本地规则（已在每行分层标注）·
+          模型 <span id="mdl"></span> · <span id="idleNote"></span>
+        </span>
+        <button class="tiny" id="btnQuit">关闭服务</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mask" id="picker">
+  <div class="dlg">
+    <div class="h">
+      <b style="font-weight:500">选择文件夹</b>
+      <span class="grow"></span>
+      <button class="tiny" id="pkClose">关闭</button>
+    </div>
+    <div class="quick" id="pkDrives"></div>
+    <div class="crumb" id="pkCrumb"></div>
+    <div class="dlist" id="pkList"></div>
+    <div class="f">
+      <span class="tiny muted">当前：</span>
+      <span class="tiny" id="pkCur" style="font-family:ui-monospace,Consolas,monospace"></span>
+      <span class="grow"></span>
+      <button class="primary" id="pkOk">就用这个文件夹</button>
+    </div>
+  </div>
+</div>
+
+<div class="mask" id="cacheDlg">
+  <div class="dlg">
+    <div class="h">
+      <b style="font-weight:500">载入哪一次的结果</b>
+      <span class="grow"></span>
+      <button class="tiny" id="ckClose">关闭</button>
+    </div>
+    <div class="dlist" id="cacheList"></div>
+    <div class="f">
+      <span class="tiny muted">回放只是读存档，不会再调用 JEV，不花额度。</span>
+      <span class="grow"></span>
+      <button class="primary" id="ckOk">取消</button>
+    </div>
+  </div>
+</div>
+
+<div class="mask" id="expander">
+  <div class="dlg">
+    <div class="h">
+      <b style="font-weight:500">这一条里面是什么</b>
+      <span class="grow"></span>
+      <button class="tiny" id="exClose">关闭</button>
+    </div>
+    <div class="crumb" id="exSub">读数据中…</div>
+    <div class="dlist" id="exList"></div>
+    <div class="f">
+      <span class="tiny muted" id="exNote"></span>
+      <span class="grow"></span>
+      <button class="primary" id="exOk">知道了</button>
+    </div>
+  </div>
+</div>
+
+<div class="ctxmenu" id="ctx"></div>
+<script>
+const $ = s => document.querySelector(s);
+let HOME = "", MASK = 1, MASK_KEEP = 4, PRIV_PAT = [];
+let ITEMS = [], VIEW = 0, PICKED = "";
+let SORT_KEY = "size", SORT_DIR = -1;
+let RULES = null, CRIT = null, WEIGHTS = null, PRIV_CFG = null, GATES = null;
+let JOB = null, POLL = null, CURSOR = 0, FLASH = new Map();   // path → 加入时刻；超过 0.7s 自动失效
+let DEDUP = null, PREV_ITEMS = null, SHOW_DIFF = false, JOB_CACHE = null;
+let FILE_COUNT = 0, USAGE = null, SCAN_STATS = null;
+/* ── 可用性修复轮新增 ── */
+let SCAN_ROOT = "";                        // 本次扫描的根：按落点要相对它分组（不是相对主目录）
+let COLLAPSED = new Set();                 // 收起的分组（按动作）
+let QUERY = "";                            // 清单搜索词
+let ACT_FILTER = new Set(["删","看","留"]); // 清单筛选：勾了哪几组
+let GROUP_ON = true;                       // 是否按动作分组（关掉 = 全局按列排序）
+/* ── 第一性原理：用户只有两个动作（删 / 不删），所以按「动作」分组，不按模型档位分组。
+      三组：可以删 / 先看一眼 / 建议不清理。分组是界面规则，不改变 JEV 的结论。 ── */
+const GATE_TX = {1: "第1关没认出来", 2: "第2关定档", 3: "走到第3关", 4: "第4关按组复核"};
+const D_COL = ["#E24B4A", "#EF9F27", "#97C459", "#1D9E75"];   // 损失 0~3 档的颜色
+const BO = {"删": 0, "看": 1, "留": 2};
+let UI = {bucket_labels: {"删": "可以删", "看": "先看一眼", "留": "建议不清理"},
+          warn_conf: 0.6, warn_size_gb: 5, keep_folded: true};
+function bucketOf(it){
+  if(it.verdict === "别碰") return "留";
+  if(it.verdict === "慎重") return "看";
+  const big = it.size >= (UI.warn_size_gb || 5) * 2**30;
+  if(it.swing || rc(it) < (UI.warn_conf || 0.6) || big) return "看";
+  return "删";
+}
+function warnShort(it){
+  if(it.swing) return "它自己也在犹豫";
+  if(rc(it) < (UI.warn_conf || 0.6)) return "把握只有 " + rc(it).toFixed(2);
+  if(it.kind === "unknown") return "它说看不懂";
+  if(it.size >= (UI.warn_size_gb || 5) * 2**30) return "这么大的件，先看一眼";
+  return "";
+}
+function warnLong(it){
+  const b = [];
+  if(it.swing) b.push(`在「${KIND_TX[it.swing[0]]||it.swing[0]}」和「${KIND_TX[it.swing[1]]||it.swing[1]}」之间摇摆`);
+  if(rc(it) < (UI.warn_conf || 0.6)) b.push(`把握只有 ${rc(it).toFixed(2)}`);
+  if(it.kind === "unknown") b.push("第 1 关就没认出来，它自己说看不懂");
+  if(it.size >= (UI.warn_size_gb || 5) * 2**30) b.push(`${fsize(it.size)} 的超大件，误删代价不对称`);
+  return b.join(" · ");
+}
+function rowTip(it){
+  const bits = [`类别：${KIND_TX[it.kind]||it.kind}`];
+  if(it.kind_conf != null) bits.push(`类别把握 ${it.kind_conf.toFixed(2)}`);
+  if(it.d_final != null) bits.push(`可删性 ${it.d_final.toFixed(2)}/3`);
+  if(it.gate) bits.push({1:"第 1 关没认出", 2:"第 2 关就定档", 3:"问过损失分", 4:"按组复核过"}[it.gate] || "");
+  if(it.class_size > 1) bits.push(`同签名 ${it.class_size} 条一并判定`);
+  if(it.needs_human) bits.push("它自己说要人看一眼");
+  return bits.filter(Boolean).join(" · ");
+}
+
+const KIND_TX = {regenerable_cache:"可再生缓存",installer:"安装包",program_body:"程序本体",
+  app_state:"应用状态",user_content:"用户产出",build_output:"构建产物",unknown:"看不懂"};
+const KIND_COL = {regenerable_cache:"#1D9E75",installer:"#5DCAA5",program_body:"#E24B4A",
+  app_state:"#EF9F27",user_content:"#378ADD",build_output:"#EF9F27",unknown:"#B4B2A9"};
+const TIER_ORDER = {"建议删除":0,"可以考虑":1,"慎重":2,"别碰":3};
+
+const mask = s => (MASK >= 1 && HOME && s) ? String(s).split(HOME).join(HOME.replace(/[^\\/]+$/,"***")) : String(s||"");
+function maskName(n){
+  n = String(n||"");
+  if(MASK < 2) return n;
+  const dot = n.lastIndexOf(".");
+  const ext = dot > 0 ? n.slice(dot) : "";
+  const base = dot > 0 ? n.slice(0, dot) : n;
+  if(base.length <= MASK_KEEP) return base + ext;
+  return base.slice(0, MASK_KEEP) + "•••" + ext;
+}
+function isPriv(n){ const l = String(n||"").toLowerCase(); return PRIV_PAT.some(p => l.includes(p)); }
+
+/* 脱敏：整条路径。
+   老实现只盖「主目录里的用户名」，文件名那一段从没管过 —— 结果名字列打码了，
+   展开的完整路径还是原样，截图发出去照样泄漏。MASK=2 起逐段盖，盘符留着。 */
+function maskPath(p){
+  const s = mask(p);
+  if(MASK < 2) return s;
+  return s.split(/([\\/])/).map(seg =>
+    (!seg || seg === "\\" || seg === "/" || /^[A-Za-z]:$/.test(seg)) ? seg : maskName(seg)
+  ).join("");
+}
+
+/* 按落点：相对「本次扫描的根」分组。
+   老实现剥的是用户主目录 —— 扫 C 盘以外的盘一个都匹配不上，
+   所有条目全归到 "D:" 一格，整页变成一根 100% 的柱子，洞察也跟着变成废话。 */
+function locOf(p){
+  let rel = String(p || "");
+  for(const b of [SCAN_ROOT, HOME]){
+    if(b && rel.toLowerCase().startsWith(b.toLowerCase())){ rel = rel.slice(b.length); break; }
+  }
+  rel = rel.replace(/^[\\/]+/, "");
+  const seg = rel.split(/[\\/]/);
+  return seg.length > 1 ? seg[0] : "(根目录下的文件)";
+}
+
+/* 清单收窄：搜索 + 动作筛选。
+   原来 2000 条要滚 122 屏，且没有任何出口 —— 这一条是「能不能用起来」的分水岭。
+   ★ 折叠**不在这里**：折叠掉的组必须保留组头，否则一收起，那一组就从界面上
+     彻底消失，用户再也没法点开它（第一版就是这么错的，被端到端测试逮住）。 */
+function fltItems(items, q, acts){
+  const kw = String(q || "").trim().toLowerCase();
+  return (items || []).filter(it=>{
+    if(acts && !acts.has(bucketOf(it))) return false;
+    if(!kw) return true;
+    const hay = (String(it.name||"") + " " + String(it.path||"") + " "
+                 + String(KIND_TX[it.kind] || it.kind || "")).toLowerCase();
+    return hay.includes(kw);
+  });
+}
+const esc = s => String(s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fsize = b => b>=1073741824 ? (b/1073741824).toFixed(2)+" GB"
+                : (b>=1048576 ? Math.round(b/1048576)+" MB" : Math.round(b/1024)+" KB");
+const idle = d => d>=365 ? (d/365).toFixed(1)+" 年" : d>=30 ? Math.round(d/30)+" 个月" : Math.round(d)+" 天";
+
+function lerp(a,b,t){return a+(b-a)*t}
+function mix(c1,c2,t){return [Math.round(lerp(c1[0],c2[0],t)),Math.round(lerp(c1[1],c2[1],t)),Math.round(lerp(c1[2],c2[2],t))]}
+const RED=[226,75,74],AMB=[239,159,39],GRN=[99,153,34];
+function delColor(r){const t=Math.min(1,Math.max(0,r/3));const c=t<0.5?mix(RED,AMB,t*2):mix(AMB,GRN,(t-0.5)*2);return`rgb(${c[0]},${c[1]},${c[2]})`}
+function confChip(c){return c>=0.6?['#EAF3DE','#27500A']:(c>=0.4?['#FAEEDA','#854F0B']:['#FCEBEB','#A32D2D'])}
+function tier(c){return c>=0.6?"hi":(c>=0.4?"mid":"lo")}
+function verdictChip(v){return {"建议删除":['#E1F5EE','#085041'],"可以考虑":['#EEF6E3','#3B6D11'],
+  "慎重":['#FAEEDA','#854F0B'],"别碰":['#FCEBEB','#A32D2D']}[v]}
+function ruleHint(it){
+  const p=(it.path||"").toLowerCase(), n=(it.name||"").toLowerCase();
+  if(p.includes("\\.git\\")||p.includes("/.git/")) return "在 .git/ 下";
+  if(p.includes("\\logs")||n==="logs") return "路径含 logs";
+  if(/\.(exe|msi|apk|dmg|pkg|1)$/.test(n)) return "安装包后缀";
+  if(p.includes("programs")||p.includes("program files")) return "在 Programs 下";
+  if(p.includes("\\cache")||p.includes("cache")||p.includes("gpucache")) return "路径含 cache";
+  if(p.includes("\\temp")||p.includes("\\tmp")) return "在临时目录下";
+  if(/^[0-9a-f]{20,}$/.test(n)) return "名称是哈希，无语义";
+  if(p.includes("documents")||p.includes("desktop")||p.includes("download")) return "在用户目录下";
+  return "按扩展名与位置推断";
+}
+
+async function jget(u){const r=await fetch(u);return r.json()}
+async function jpost(u,b){const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})});return r.json()}
+
+async function boot(){
+  const i = await jget("/api/info");
+  HOME = i.home; $("#mdl").textContent = i.model;
+  const idle = (i.server && i.server.idle_shutdown_minutes) || 0;
+  $("#idleNote").textContent = idle
+    ? `无人操作 ${idle} 分钟后本服务会自动退出`
+    : "本服务不会自动退出，用完请点「关闭服务」";
+  CRIT = i.config.criteria; WEIGHTS = i.config.weights; RULES = i.config.rules;
+  GATES = i.config.gates || {};
+  if(i.config.ui) UI = Object.assign(UI, i.config.ui);
+  PRIV_CFG = i.config.privacy || {};
+  PRIV_PAT = PRIV_CFG.name_patterns || [];
+  MASK_KEEP = PRIV_CFG.mask_name_keep || 4;
+  renderCrit();
+  if(!i.has_key) showErr("没有找到环境变量 TYPESAFE_API_KEY —— 服务端需要它才能调用 JEV。");
+  const d = await jget("/api/drives");
+  PICKED = d.quick.length ? d.quick[1].path : d.drives[0].path;
+  $("#curPath").textContent = mask(PICKED);
+  openPicker(PICKED, true);
+}
+
+function showErr(t){ $("#errBar").style.display="block"; $("#errText").textContent=t; }
+
+/* ---------- 目录选择器 ---------- */
+async function openPicker(path, silent){
+  PICKED = path;
+  const r = await jget("/api/browse?path="+encodeURIComponent(path));
+  if(!r.ok){ if(!silent) showErr(r.error); return; }
+  $("#pkCur").textContent = mask(r.path);
+  const parts = r.path.replace(/\\$/,"").split("\\");
+  let acc = "", crumb = "";
+  parts.forEach((p,idx)=>{
+    acc = idx===0 ? p+"\\" : acc.replace(/\\$/,"")+"\\"+p;
+    const real = acc;
+    crumb += (idx? ' <span class="tx3">›</span> ' : '') +
+      `<a data-go="${esc(real)}">${esc(p)}</a>`;
+  });
+  $("#pkCrumb").innerHTML = crumb + (r.parent ? ` <span class="tx3">·</span> <a data-go="${esc(r.parent)}">上一级</a>` : "");
+  const quick = await jget("/api/drives");
+  let qh = "";
+  quick.drives.forEach(d => qh += `<button class="tiny" data-go="${esc(d.path)}">${esc(d.name)}</button>`);
+  quick.quick.forEach(d => qh += `<button class="tiny" data-go="${esc(d.path)}">${esc(d.name)}</button>`);
+  $("#pkDrives").innerHTML = qh;
+  $("#pkList").innerHTML = r.dirs.length
+    ? r.dirs.map(d => `<div class="ditem" data-go="${esc(d.path)}"><span class="ic"></span>${esc(d.name)}</div>`).join("")
+    : `<div class="tx3 tiny" style="padding:14px">（这里没有子文件夹）</div>`;
+  $("#picker").classList.add("show");
+}
+$("#picker").addEventListener("click", e => {
+  if(e.target.id === "picker") $("#picker").classList.remove("show");
+  const go = e.target.dataset && e.target.dataset.go;
+  if(go){ e.preventDefault(); openPicker(go); }
+});
+$("#pkClose").onclick = () => $("#picker").classList.remove("show");
+$("#pkOk").onclick = () => { $("#curPath").textContent = maskPath(PICKED); $("#picker").classList.remove("show"); };
+$("#btnPick").onclick = () => openPicker(PICKED);
+
+/* ---------- 扫描 ---------- */
+async function startScan(p){
+  if(!p) return;
+  PICKED = p; SCAN_ROOT = p; $("#curPath").textContent = maskPath(p);
+  $("#errBar").style.display="none";
+  $("#truncNote").style.display="none";
+  ITEMS = []; CURSOR = 0; FLASH.clear(); FILE_COUNT = 0;
+  SCAN_ROOT = p;                       // ★ 按落点要用它当基准
+  COLLAPSED = new Set(); QUERY = ""; ACT_FILTER = new Set(["删","看","留"]);
+  if($("#q")) $("#q").value = "";
+  PREV_ITEMS = null; DEDUP = null; JOB_CACHE = null; USAGE = null; SCAN_STATS = null; $("#diffCard").style.display = "none";
+  render();
+  $("#rows").innerHTML = "";
+  $("#btnScan").disabled = true; $("#btnScan").textContent = "扫描中…";
+  $("#btnCancel").style.display = "inline-block";
+  $("#statusBar").style.display = "block";
+  $("#stPhase").textContent = "正在启动…"; $("#stBar").style.width = "0%"; $("#stSub").textContent = "";
+  const r = await jpost("/api/scan", {path: PICKED});
+  if(!r.ok){ stopButtons("开始扫描"); showErr(r.error); return; }
+  if(r.cancelled && r.cancelled.length)
+    showErr("已自动停掉之前还在跑的 " + r.cancelled.length + " 个任务（同一时间只允许跑一个扫描）。");
+  JOB = r.id; poll(); watchJobs();
+}
+$("#btnScan").onclick = () => startScan(PICKED);
+
+function stopButtons(label){
+  $("#btnScan").disabled = false; $("#btnScan").textContent = label;
+  $("#btnCancel").style.display = "none";
+}
+
+$("#btnCancel").onclick = async () => {
+  if(!JOB) return;
+  await jpost("/api/cancel", {id: JOB});
+  $("#stPhase").textContent = "正在中止…（正在飞的那次请求最多等 20 秒）";
+};
+$("#btnKillAll").onclick = async () => {
+  const r = await jpost("/api/cancel", {id: "*"});
+  if(r.ok) $("#jobTx").textContent = `已中止 ${r.cancelled} 个任务`;
+};
+
+/* 把服务端这一帧的状态收进全局。★ 必须在 render() 之前调用。
+   老代码是先 render 后赋值，于是「归并 N 类」「最终 token 数」永远慢一拍；
+   而 done 那次 items 为空、压根不进 render 分支，这两个数字最后根本没机会上屏。 */
+function absorb(s){
+  if(s.file_count != null) FILE_COUNT = s.file_count;
+  if(s.dedup) DEDUP = s.dedup;
+  if(s.cache) JOB_CACHE = s.cache;
+  if(s.usage) USAGE = s.usage;
+  if(s.scan_stats) SCAN_STATS = s.scan_stats;
+}
+
+function poll(){
+  clearTimeout(POLL);
+  POLL = setTimeout(async () => {
+    const s = await jget(`/api/job?id=${JOB}&since=${CURSOR}`);
+    if(!s.ok){ stopButtons("重新扫描"); showErr(s.error||"任务丢失"); return; }
+    if(s.items && s.items.length){
+      s.items.forEach(x => FLASH.set(x.path, Date.now()));
+      ITEMS = ITEMS.concat(s.items);
+      CURSOR = s.cursor;
+    }
+    const grew = !!(s.items && s.items.length);
+    const fcChanged = (s.file_count != null && s.file_count !== FILE_COUNT);
+    absorb(s);                       // ★ 先吸收状态
+    if(grew || fcChanged) render();  // ★ 再渲染
+    let pct = s.total_entries ? Math.round(100*(s.judged||0)/s.total_entries) : 0;
+    if(!pct && s.state==="judging") pct = 40;
+    if(!pct && s.state==="scanning") pct = 12;
+    $("#stBar").style.width = Math.min(100, s.state==="done"?100:pct) + "%";
+    $("#stPhase").textContent = s.phase || s.state;
+    $("#stTime").textContent = s.elapsed_ms ? (s.elapsed_ms/1000).toFixed(1)+" s" : "";
+    const bits = [];
+    if(s.file_count){
+      let t = `读到 ${s.file_count.toLocaleString()} 个文件`;
+      if(s.scan_ms){
+        const sec = Math.max(s.scan_ms / 1000, 0.05);
+        t += ` · ${sec.toFixed(1)}s（${Math.round(s.file_count / sec).toLocaleString()} 个/秒）`;
+      }
+      bits.push(t);
+    }
+    if(s.total_entries != null) bits.push(`折叠成 ${s.total_entries} 个条目`);
+    const ss = s.scan_stats;
+    if(ss){
+      if(ss.links_skipped)
+        bits.push(`跳过 ${ss.links_skipped.toLocaleString()} 个链接（junction/符号链接，指向的内容不重复统计）`);
+      if(ss.slowest_ms >= 400 && ss.slowest_dir)
+        bits.push(`最慢的一层：${ss.slowest_dir}（${Math.round(ss.slowest_ms)} ms）`);
+    }
+    const u = s.usage;
+    if(u && u.requests){
+      const cost = (u.input_tokens/1e6*0.042).toFixed(6);
+      bits.push(`JEV 调用 ${u.requests} 次 / ${u.input_tokens.toLocaleString()} token ≈ $${cost}`);
+    }
+    $("#stSub").textContent = bits.join(" · ");
+    if(s.truncated){
+      $("#truncNote").style.display = "block";
+      $("#truncNote").textContent = "⚠ 文件数超过上限，扫描被截断 —— 结果不完整，换一个更小的目录会更准。";
+    }
+    if(s.error){ stopButtons("重新扫描"); showErr(s.error+"\n"+(s.trace||"")); return; }
+    if(s.state === "done" || s.state === "cancelled"){
+      stopButtons("重新扫描");
+      render();      // ★ 补最后一帧：done 那次通常没有新条目，不补这一下，
+                     //   概要行和列表脚注就永远停在倒数第二次的数字上
+      if(s.state === "cancelled"){
+        $("#stPhase").textContent = s.phase || "已中止";
+        if((s.cancel_why||"").indexOf("顶掉") >= 0)
+          showErr("这次扫描被更新的一次顶掉了（之前同时跑了两个任务）。现在同一时间只会跑一个。");
+      }
+      if(s.rejudge_of && PREV_ITEMS && s.state==="done"){ buildDiff(); SHOW_DIFF = true; $("#diffCard").style.display="block"; }
+      setTimeout(()=>{ $("#statusBar").style.display="none"; }, s.state==="done" ? 1500 : 2500);
+      return;
+    }
+    poll();
+  }, 700);        // 原来 300ms —— 卡住时每秒新建 3 条连接，实测堆了 95 条 TIME_WAIT
+}
+
+/* ---------- 后台任务监视：随时看得见还有几个任务在跑 ---------- */
+let JOBWATCH = null;
+async function watchJobs(){
+  try{
+    const j = await jget("/api/jobs");
+    if(!j.ok) return;
+    const run = (j.jobs||[]).filter(x => ["queued","scanning","judging"].includes(x.state));
+    $("#jobBar").style.display = run.length ? "block" : "none";
+    if(run.length){
+      const mine = run.filter(x => x.id === JOB).length;
+      $("#jobTx").textContent = `后台还有 ${run.length} 个任务在跑` + (mine ? "（其中 1 个是当前这个）" : "");
+      $("#jobList").textContent = run.map(x =>
+        `${(x.root||"").replace(/[\\/]+$/,"")}：${x.phase||x.state} · ${x.secs}s`
+      ).join("　|　");
+    }
+  }catch(e){ /* 服务可能刚关掉，忽略 */ }
+  JOBWATCH = setTimeout(watchJobs, 2500);
+}
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) watchJobs(); });
+
+/* ---------- 统计 ---------- */
+function rc(it){ return (it.row_conf !== undefined && it.row_conf !== null) ? it.row_conf : (it.conf||0); }
+function stats(){
+  const s = {n:ITEMS.length, recover:0, recoverN:0, deleteN:0, deleteSize:0,
+             confSum:0, hi:0, mid:0, lo:0, priv:0};
+  ITEMS.forEach(it=>{
+    const v = it.verdict, c = rc(it);
+    if(v==="建议删除" || v==="可以考虑"){ s.recover += it.size; s.recoverN++; }
+    if(v==="建议删除"){ s.deleteN++; s.deleteSize += it.size; }
+    if(it.privacy) s.priv++;
+    s.confSum += c;
+    s[tier(c)]++;
+  });
+  s.avgConf = s.n ? s.confSum/s.n : 0;
+  return s;
+}
+function renderMetrics(){
+  const n = ITEMS.length;
+  const g = {"删": [], "看": [], "留": []};
+  ITEMS.forEach(x => g[bucketOf(x)].push(x));
+  const sz = a => a.reduce((s, x) => s + x.size, 0);
+  const big = a => a.length ? `${a.length} 项 · ${fsize(sz(a))}` : "0 项";
+  if(!n){
+    $("#s1").textContent = $("#s2").textContent = $("#s3").textContent = "—";
+    $("#s4").textContent = "—";
+    $("#foldCalc").textContent = "";
+  } else {
+    $("#s1").textContent = big(g["删"]);
+    $("#s2").textContent = big(g["看"]);
+    $("#s3").textContent = big(g["留"]);
+    $("#s4").textContent = n + " 项 / " + fsize(sz(ITEMS));
+    const bits = [];
+    if(FILE_COUNT) bits.push(FILE_COUNT.toLocaleString() + " 个文件");
+    if(DEDUP) bits.push("归并 " + DEDUP.classes + " 类");
+    bits.push("判 " + n + " 条");
+    $("#foldCalc").textContent = bits.join(" → ");
+  }
+}
+
+/* ---------- ① 处置 ---------- */
+/* 排序模型（重组过）：
+   · 分组改成按「动作」分：可以删 / 先看一眼 / 建议不清理。用户只有两个动作，不是四个档位。
+   · 列排序交给表头点击（SORT_KEY + SORT_DIR），和市面工具（WizTree 等）一致。 */
+const SORT_LABEL = {size:"体积", del:"可删性", conf:"把握", gain:"能腾的空间", kind:"类别"};
+const DEFAULT_DIR = {size:-1, del:-1, conf:1, gain:-1, kind:1};
+
+function sortVal(it, k){
+  if(k === "del")  return it.d_final || 0;
+  if(k === "conf") return rc(it);
+  if(k === "gain") return (it.d_final || 0) * it.size;
+  return it.size;
+}
+function cmpKey(a, b, k){
+  if(k === "kind"){
+    const x = KIND_TX[a.kind] || a.kind || "~", y = KIND_TX[b.kind] || b.kind || "~";
+    return x < y ? -1 : x > y ? 1 : 0;
+  }
+  return sortVal(a, k) - sortVal(b, k);
+}
+function sorted(){
+  const r = ITEMS.slice();
+  r.sort((a,b)=>{
+    if(GROUP_ON){
+      const d = BO[bucketOf(a)] - BO[bucketOf(b)];  // 先按「该做什么」分组（可关）
+      if(d) return d;
+    }
+    const v = cmpKey(a, b, SORT_KEY);               // 再按当前列
+    if(v) return SORT_DIR * v;
+    return b.size - a.size;
+  });
+  return r;
+}
+function syncSort(){
+  document.querySelectorAll(".thc[data-k]").forEach(th=>{
+    const act = th.dataset.k === SORT_KEY;
+    th.classList.toggle("act", act);
+    const c = th.querySelector(".car");
+    if(c) c.textContent = act ? (SORT_DIR < 0 ? "▼" : "▲") : "";
+  });
+}
+/* 可删性那一列：不再是一个数，直接画四档分布（学 neo4jev —— 分布本身就是信号） */
+function delBar(it){
+  if(it.d_prob){
+    const segs = [0,1,2,3].map(i=>{
+      const p = it.d_prob[String(i)] || 0;
+      return `<i style="flex:${Math.max(p,0.001)} 1 0;display:block;height:100%;background:${D_COL[i]}"
+        title="${i} 档 ${Math.round(p*100)}%"></i>`;
+    }).join("");
+    const tip = [0,1,2,3].map(i=>`第${i}档 ${Math.round((it.d_prob[String(i)]||0)*100)}%`).join(" · ");
+    return `<div style="display:flex;height:7px;border-radius:3px;overflow:hidden;margin-top:4px" title="删除损失四档分布：${esc(tip)}">${segs}</div>`;
+  }
+  return `<div class="tiny tx3" style="margin-top:4px">${esc(GATE_TX[it.gate]||"没问损失分")}</div>`;
+}
+function renderRows(){
+  const r = fltItems(sorted(), QUERY, ACT_FILTER);
+  const isFolded = bk => GROUP_ON && COLLAPSED.has(bk);   // 折叠只影响「条目画不画」，不影响组头
+  let html = "", lastT = null;
+  r.forEach((it,i)=>{
+    const bk = bucketOf(it);
+    if(bk !== lastT){
+      lastT = bk;
+      if(GROUP_ON){
+      const grp = r.filter(x => bucketOf(x) === bk);
+      const sz  = grp.reduce((a,b)=> a + b.size, 0);
+      const avg = grp.reduce((a,b)=> a + rc(b), 0) / Math.max(grp.length, 1);
+      const label = (UI.bucket_labels || {})[bk] || bk;
+      html += `<div class="grp b-${esc(bk)}${COLLAPSED.has(bk) ? " folded" : ""}" data-grp="${esc(bk)}"
+        title="点一下收起 / 展开这一组">
+        <span class="grpcar">${COLLAPSED.has(bk) ? "▸" : "▾"}</span>
+        <div class="bl">${esc(label)}　<span class="tiny" style="font-weight:400">${grp.length} 项${isFolded(bk) ? " · 已收起" : ""}</span></div>
+        <span class="tiny" style="text-align:right">${fsize(sz)}</span>
+        <span class="conf ${avg>=0.70?"hi":avg>=0.40?"mid":"lo"}" title="这一组 ${grp.length} 项的平均把握">${avg.toFixed(2)}<i><b style="width:${Math.round(avg*100)}%"></b></i></span>
+        <span></span></div>`;
+      }
+    }
+    if(isFolded(bk)) return;            // ★ 折叠的组：组头保留，条目跳过
+    const ws = warnShort(it);
+    const dg = it.degraded
+      ? `<span class="tag" style="background:#FDF0D5;color:#8A5A00;margin-right:5px" title="这一批请求没成功，这条结论是降级出来的 —— 请自己看一眼">没判出</span>`
+      : "";
+    const ft = FLASH.get(it.path);
+    const flash = (ft && Date.now() - ft < 700) ? " flash" : "";
+    const pv = it.privacy ? `<span class="tag" style="background:var(--red-bg);color:var(--red-tx);margin-right:5px">隐私?</span>` : "";
+    const cc = rc(it);
+    const ccls = cc >= 0.70 ? "hi" : cc >= 0.40 ? "mid" : "lo";
+    const ctip = (it.kind_conf != null && it.conf != null)
+      ? `JEV 自报把握 = 取两者较弱：类别判断 ${(it.kind_conf).toFixed(2)} · 删除损失 ${(it.conf).toFixed(2)}`
+      : "JEV 自报把握";
+    html += `<div class="tr${flash}" data-path="${esc(it.path)}" data-dir="${it.is_dir?1:0}"
+      title="${esc(rowTip(it))}" style="${it.is_dir?"cursor:pointer":""}">
+      <span class="tx3" style="font-size:11px">${i+1}</span>
+      <div style="min-width:0" class="cellname" title="点击展开 / 收起完整路径">
+        <div class="nm">${dg}${pv}${esc(maskName(it.name))}${it.is_dir?' <span class="tx3" style="font-size:10px">›</span>':""}${ws?` <span class="wchip" title="${esc(warnLong(it))}">⚠ ${esc(ws)}</span>`:""}</div>
+        <div class="fullpath">${esc(maskPath(it.path))}</div>
+      </div>
+      <span style="text-align:right;font-size:12px">${fsize(it.size)}</span>
+      <span class="conf ${ccls}" title="${esc(ctip)}">${cc.toFixed(2)}<i><b style="width:${Math.round(cc*100)}%"></b></i></span>
+      <span class="tiny tx3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(KIND_TX[it.kind]||it.kind)}</span>
+    </div>`;
+  });
+  $("#rows").innerHTML = html || `<div class="tx3 tiny" style="padding:26px;text-align:center">`
+    + (ITEMS.length
+        ? "没有匹配的条目 —— 换个词，或把上面的筛选项都打开。"
+        : "还没有结果。点右上角「选择文件夹」，再点「开始扫描」。")
+    + `</div>`;
+  const shownBytes = ITEMS.reduce((a, b) => a + (b.size || 0), 0);
+  const totBytes = (SCAN_STATS && SCAN_STATS.bytes) || 0;
+  const cov = (totBytes > 0 && shownBytes > 0)
+    ? `　·　覆盖 ${fsize(shownBytes)} / 扫到 ${fsize(totBytes)}（${Math.round(shownBytes / totBytes * 100)}%）`
+    : "";
+  const shownN = r.filter(it => !isFolded(bucketOf(it))).length;
+  $("#shown").textContent = ITEMS.length
+    ? `${shownN} 项` + (shownN !== ITEMS.length ? ` / 共 ${ITEMS.length} 条` : "") + cov
+    : "选个文件夹 → 开始扫描";
+  syncChips(shownN);
+  const u = USAGE, ss = SCAN_STATS;
+  const links = (ss && ss.links_skipped) ? ` · 跳过 ${ss.links_skipped.toLocaleString()} 个链接` : "";
+  const avgAll = ITEMS.length ? ITEMS.reduce((a,b)=>a+rc(b),0)/ITEMS.length : 0;
+  const avgTx = ITEMS.length ? ` · 平均把握 ${avgAll.toFixed(2)}` : "";
+  $("#foot2").textContent = ITEMS.length && u && u.requests
+    ? `JEV ${u.requests} 次调用 · ${(u.input_tokens/1000).toFixed(1)}k token · $${(u.input_tokens/1e6*0.042).toFixed(5)}${avgTx} · 全程只读${links}`
+    : (ITEMS.length ? `全程只读，不会删任何文件${avgTx}${links}` : "");
+  const dgN = DEDUP && (DEDUP.degraded_items || DEDUP.degraded);
+  if(dgN){
+    // 带上第一手原因：key 失效 / 断网 / 服务挂 不该长得一样（textContent，不转义）
+    const why = (DEDUP.degraded_why && DEDUP.degraded_why.length)
+      ? `　原因：${String(DEDUP.degraded_why[0]).slice(0,80)}` : "";
+    $("#foot2").textContent += `　·　⚠ 有 ${dgN} 项没判出来（请求失败，已按「慎重」处理）${why}`;
+  }
+}
+
+/* ---------- ② 构成 ---------- */
+function renderCompose(){
+  const byK = {}, byL = {};
+  ITEMS.forEach(it=>{
+    const k = it.kind || "unknown";
+    byK[k] = byK[k] || {size:0, n:0}; byK[k].size += it.size; byK[k].n++;
+    const loc = locOf(it.path);          // ★ 相对扫描根，不是相对主目录
+    byL[loc] = byL[loc] || {size:0, n:0}; byL[loc].size += it.size; byL[loc].n++;
+  });
+  const total = Object.values(byK).reduce((a,b)=>a+b.size,0) || 1;
+  const kArr = Object.entries(byK).sort((a,b)=>b[1].size-a[1].size);
+  const lArr = Object.entries(byL).sort((a,b)=>b[1].size-a[1].size).slice(0,8);
+  const kMax = kArr.length ? kArr[0][1].size : 1, lMax = lArr.length ? lArr[0][1].size : 1;
+  $("#byKind").innerHTML = kArr.map(([k,d])=>`<div class="big">
+    <span style="font-size:12px">${esc(KIND_TX[k]||k)}</span>
+    <div class="track"><i style="width:${Math.round(d.size/kMax*100)}%;background:${KIND_COL[k]||"#9C9A90"}"></i></div>
+    <span style="text-align:right;font-size:12px">${fsize(d.size)}</span>
+    <span class="tiny tx3" style="text-align:right">${Math.round(d.size/total*100)}%</span></div>`).join("");
+  $("#byLoc").innerHTML = lArr.map(([k,d])=>`<div class="big">
+    <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(k)}">${esc(maskName(k))}</span>
+    <div class="track"><i style="width:${Math.round(d.size/lMax*100)}%;background:#85B7EB"></i></div>
+    <span style="text-align:right;font-size:12px">${fsize(d.size)}</span>
+    <span class="tiny tx3" style="text-align:right">${Math.round(d.size/total*100)}%</span></div>`).join("");
+  const top = kArr[0], topL = lArr[0];
+  $("#insight").innerHTML = (top && topL)
+    ? `<div class="tiny muted">一句话洞察</div><div style="margin-top:3px">${fsize(total)} 里有 <b style="font-weight:500">${fsize(top[1].size)}</b> 是${esc(KIND_TX[top[0]]||top[0])}；这些条目里最大的一块落在 <b style="font-weight:500">${esc(maskName(topL[0]))}</b>${SCAN_ROOT?"（相对本次扫描的目录）":""}。</div>`
+    : "";
+}
+
+/* ---------- ③ 年代 ---------- */
+function renderYears(){
+  const byY = {};
+  ITEMS.forEach(it=>{
+    // ★ 折叠成一条的目录，用「内部最老文件」的年份 —— 用目录自身的 mtime 会把
+    //   一个装着 2023 年东西的文件夹算进"今年"，掩盖它其实早就没人动过。
+    const src = (it.is_dir && it.mtime_oldest) ? it.mtime_oldest : (it.mtime||"");
+    const y = src.slice(0,4) || "未知";
+    byY[y] = byY[y] || {size:0, n:0, dirs:0}; byY[y].size += it.size; byY[y].n++;
+    if(it.is_dir) byY[y].dirs++;
+  });
+  const arr = Object.entries(byY).sort((a,b)=>a[0]<b[0]?-1:1);
+  const max = arr.length ? Math.max(...arr.map(x=>x[1].size)) : 1;
+  const tot = ITEMS.reduce((a,b)=>a+b.size, 0) || 1;
+  const nowY = new Date().getFullYear();
+  $("#byYear").innerHTML = arr.map(([y,d])=>{
+    const age = /^\d{4}$/.test(y) ? nowY - (+y) : null;
+    const note = age===null ? "" : (age>=2 ? "← 两年以上没碰过" : age===0 ? "今年还在动" : "");
+    const extra = d.dirs ? `（其中 ${d.dirs} 个文件夹按"内部最老内容"归年）` : "";
+    return `<div class="big" style="grid-template-columns:112px minmax(0,1fr) 74px 44px">
+      <span style="font-size:12px">${esc(y)} 年</span>
+      <div class="track"><i style="width:${Math.round(d.size/max*100)}%;background:${age>=2?"#E24B4A":age===0?"#1D9E75":"#EF9F27"}"></i></div>
+      <span style="text-align:right;font-size:12px">${fsize(d.size)}</span>
+      <span class="tiny tx3" style="text-align:right">${Math.round(d.size/tot*100)}%</span>
+      <div class="tiny tx3" style="grid-column:1/-1;padding-left:2px">${d.n} 项 ${esc(note)} ${esc(extra)}</div>
+    </div>`;
+  }).join("");
+}
+
+/* ---------- ④ 先看一眼（＝① 里那一组的明细） ---------- */
+function renderUnsure(){
+  const u = ITEMS.filter(x => bucketOf(x) === "看").sort((a,b)=>(rc(a)-rc(b))||(b.size-a.size));
+  $("#unsure").innerHTML = u.length ? `
+    <div class="warnbox" style="margin-bottom:12px">
+      <b style="font-weight:500;color:var(--amber-tx)">${u.length} 项需要你自己看一眼 —— 模型没把握、在两类之间摇摆，或者是超大件</b>
+      <div class="tiny" style="margin-top:4px;color:var(--amber-tx)">它们不属于可以删（工具不替你打包票），也不属于建议不清理。点开目录能看到里面真实的文件。</div>
+    </div>` + u.map(it=>{
+      const cf = confChip(rc(it));
+      const pv = it.privacy ? `<span class="tag" style="background:var(--red-bg);color:var(--red-tx);margin-right:5px">隐私?</span>` : "";
+      const ws = warnShort(it);
+      return `<div class="tr" data-path="${esc(it.path)}" data-dir="${it.is_dir?1:0}"
+        style="${it.is_dir?"cursor:pointer":""}" title="${esc(rowTip(it))}">
+        <span class="tag" style="background:${cf[0]};color:${cf[1]}">${rc(it).toFixed(2)}</span>
+        <div style="min-width:0"><div class="nm" title="${esc(mask(it.path))}">${pv}${esc(maskName(it.name))}${ws?` <span class="wchip">⚠ ${esc(ws)}</span>`:""}</div>
+          <div class="ev">${esc(warnLong(it)||rowTip(it))}</div></div>
+        <span style="text-align:right;font-size:12px">${fsize(it.size)}</span>
+        <span class="tiny">${esc(KIND_TX[it.kind]||it.kind)}</span></div>`;
+    }).join("") : `<div class="tx3 tiny">还没有数据 —— 目前没有需要你亲自看的条目。</div>`;
+}
+
+/* ---------- 判断口径：可编辑 + 一键全盘重判（学 playground 的 A/B 与 CV screener 的 policy-changed-free-rescore） ---------- */
+function renderCrit(){
+  if(!CRIT || !GATES) return;
+  const kRows = Object.entries(CRIT.kinds).map(([key,v])=>`
+    <div class="row" style="margin-top:4px;flex-wrap:nowrap">
+      <span class="tiny muted" style="width:96px;flex:none">${esc(KIND_TX[key]||key)}</span>
+      <input data-ck="${esc(key)}" value="${esc(v)}" style="flex:1;min-width:0"></div>`).join("");
+  const dRows = CRIT.deletability.map((v,i)=>`
+    <div class="row" style="margin-top:4px;flex-wrap:nowrap">
+      <span class="tiny muted" style="width:96px;flex:none">第 ${i} 档</span>
+      <input data-cd="${i}" value="${esc(v)}" style="flex:1;min-width:0"></div>`).join("");
+  $("#critBox").innerHTML = `
+    <div class="tiny tx3" style="margin-bottom:10px">这些就是喂给 JEV 的全部「标准」。改完点<b style="font-weight:500">按新标准重判</b>：
+      几秒钟后同一批数据按新口径重算，并和旧口径并排对比 —— <b style="font-weight:500">360 的规则写死在代码里，这里的标准是活的</b>。
+      改动默认只在本页生效，要永久保存点「写入 config.json」（会先备份原文件）。</div>
+    <div class="grid2" style="gap:20px">
+      <div>
+        <h3>第 1 关 · 认名字（Noul 0~1）</h3>
+        <textarea data-gt="recognize" rows="3">${esc(GATES.recognize||"")}</textarea>
+        <div class="row" style="margin-top:6px;flex-wrap:nowrap"><span class="tiny muted" style="width:96px;flex:none">认出门槛</span>
+          <input data-gr="recognize_floor" type="number" min="0.05" max="0.95" step="0.05" value="${GATES.recognize_floor}" style="width:86px">
+          <span class="tiny tx3">低于它 → 直接「看不懂」，后面几关不再问</span></div>
+        <h3 style="margin-top:14px">第 2 关 · 判类别（Choice）</h3>
+        <input data-gt="kind" value="${esc(GATES.kind||"")}" style="width:100%">
+        <div style="margin-top:4px">${kRows}</div>
+        <h3 style="margin-top:14px">第 3 关 · 问删除损失（Score）—— 只对可能是垃圾的问</h3>
+        <textarea data-gt="loss" rows="3">${esc(GATES.loss||"")}</textarea>
+        <div style="margin-top:4px">${dRows}</div>
+        <h3 style="margin-top:14px">第 4 关 · 同签名一组是否一致（Choice）</h3>
+        <textarea data-gt="batch" rows="2">${esc(GATES.batch||"")}</textarea>
+      </div>
+      <div>
+        <h3>裁决规则</h3>
+        <div class="row" style="margin-top:4px;flex-wrap:nowrap"><span class="tiny muted" style="width:168px;flex:none">类别把握低于此 → 不许建议删</span>
+          <input data-rl="kind_conf_floor" type="number" step="0.05" min="0" max="1" value="${RULES.kind_conf_floor}" style="width:80px"></div>
+        <div class="row" style="margin-top:6px;flex-wrap:nowrap"><span class="tiny muted" style="width:168px;flex:none">摇摆阈值（第 1 名领先不到）</span>
+          <input data-rl="swing_gap" type="number" step="0.05" min="0" max="1" value="${RULES.swing_gap}" style="width:80px"></div>
+        <label class="row" style="margin-top:12px;cursor:pointer">
+          <input type="checkbox" data-rl="dedup" ${RULES.dedup!==false?"checked":""} style="width:auto">
+          <span class="tiny">特征去重：同签名只判一次，结论映射回全组</span></label>
+        <div class="note tiny" style="margin-top:14px;color:var(--red-tx);background:var(--red-bg)">
+          JEV 只能从上面这些选项里选。选项里没有的答案它永远给不出来 —— 它只会在都不合适的选项里挑一个最不烂的。</div>
+        <div class="row" style="margin-top:14px">
+          <button class="primary" id="btnRejudge">按新标准重判</button>
+          <button id="btnCritSave">写入 config.json</button>
+          <button id="btnCritReset">还原</button>
+        </div>
+        <div class="tiny" id="critMsg" style="margin-top:8px"></div>
+      </div>
+    </div>`;
+  $("#btnRejudge").onclick = ()=>doCriteria(true, false);
+  $("#btnCritSave").onclick = ()=>doCriteria(false, true);
+  $("#btnCritReset").onclick = ()=>{ renderCrit(); $("#critMsg").textContent = "已还原成服务器当前值。"; };
+}
+
+function collectCrit(){
+  const out = {criteria:{kinds:{}, deletability:[]}, gates:{}, rules:{}};
+  document.querySelectorAll("#critBox [data-ck]").forEach(el=>out.criteria.kinds[el.dataset.ck]=el.value);
+  document.querySelectorAll("#critBox [data-cd]").forEach(el=>out.criteria.deletability[+el.dataset.cd]=el.value);
+  document.querySelectorAll("#critBox [data-gt]").forEach(el=>out.gates[el.dataset.gt]=el.value);
+  const rf = document.querySelector("#critBox [data-gr]");
+  if(rf) out.gates.recognize_floor = parseFloat(rf.value);
+  document.querySelectorAll("#critBox [data-rl]").forEach(el=>{
+    out.rules[el.dataset.rl] = el.type==="checkbox" ? el.checked : parseFloat(el.value);
+  });
+  return out;
+}
+
+async function doCriteria(rejudge, persist){
+  const msg = $("#critMsg");
+  msg.textContent = "正在应用新标准…";
+  const body = collectCrit(); body.persist = !!persist;
+  const r1 = await jpost("/api/criteria", body);
+  if(!r1.ok){ msg.textContent = "失败: " + (r1.error||"?"); return; }
+  CRIT = r1.criteria; GATES = r1.gates; RULES = r1.rules;
+  msg.textContent = r1.errors && r1.errors.length
+    ? ("部分生效（被拒绝的字段已还原）: " + r1.errors.join("；"))
+    : ("已生效: " + r1.applied.join("、"));
+  if(r1.errors && r1.errors.length) renderCrit();
+  if(!rejudge) return;
+  if(!ITEMS.length){ msg.textContent += "　先扫描一次才有东西可重判。"; return; }
+  PREV_ITEMS = ITEMS.slice(); CURSOR = 0; ITEMS = []; FLASH.clear(); DEDUP = null;
+  $("#diffCard").style.display = "none";
+  const r2 = await jpost("/api/rejudge", {cache: JOB_CACHE});
+  if(!r2.ok){
+    ITEMS = PREV_ITEMS; PREV_ITEMS = null; render();
+    msg.textContent += "　重判失败: " + r2.error;
+    return;
+  }
+  JOB = r2.id;
+  $("#statusBar").style.display = "block";
+  $("#stPhase").textContent = "按新标准重判中…"; $("#stBar").style.width = "0%";
+  $("#btnScan").disabled = true; $("#btnCancel").style.display = "inline-block";
+  poll();
+}
+
+function buildDiff(){
+  if(!PREV_ITEMS) return;
+  const old = {}; PREV_ITEMS.forEach(x=>old[x.path]=x);
+  const chg = [];
+  ITEMS.forEach(n=>{
+    const o = old[n.path]; if(!o) return;
+    const od = o.d_final==null ? null : +o.d_final, nd = n.d_final==null ? null : +n.d_final;
+    if(o.verdict!==n.verdict || o.kind!==n.kind || od!==nd) chg.push({n,o});
+  });
+  const same = PREV_ITEMS.length - chg.length;
+  $("#diffBody").innerHTML = `
+    <div class="tiny" style="margin-bottom:8px">同一批 ${PREV_ITEMS.length} 条数据：结论没变 ${same} 条，变化 <b style="font-weight:500">${chg.length}</b> 条。</div>
+    <div class="note tiny" style="margin-bottom:8px;background:var(--amber-bg);color:var(--amber-tx)">
+      注意：JEV 对<b style="font-weight:500">完全相同的输入也会抖动</b>（实测 ±0.1 左右）。
+      所以<b style="font-weight:500">只变小数、档位没变的行，多半是抖动不是新口径的效果</b> —— 看结论档位的变化更可靠。</div>
+    ${chg.length ? `<div style="max-height:280px;overflow:auto">${chg.slice(0,80).map(({n,o})=>`
+      <div class="tr" style="grid-template-columns:minmax(0,1fr) 170px 170px">
+        <div style="min-width:0"><div class="nm" title="${esc(mask(n.path))}">${esc(maskName(n.name))}</div>
+          <div class="ev">${esc(mask(n.path))}</div></div>
+        <span class="tiny">${esc(KIND_TX[o.kind]||o.kind)} · ${esc(o.verdict)}${o.d_final==null?"":" "+o.d_final.toFixed(2)}</span>
+        <span class="tiny" style="color:var(--blue-tx)">→ ${esc(KIND_TX[n.kind]||n.kind)} · ${esc(n.verdict)}${n.d_final==null?"":" "+n.d_final.toFixed(2)}</span>
+      </div>`).join("")}</div>`
+    : `<div class="tiny tx3">没有条目发生变化 —— 新旧口径下它的判断一致。</div>`}`;
+}
+$("#btnDiffBack").onclick = ()=>{
+  if(!PREV_ITEMS) return;
+  const cur = ITEMS; ITEMS = PREV_ITEMS; PREV_ITEMS = cur;   // 交换，可来回切
+  $("#diffCard").style.display = "none";
+  render();
+};
+$("#btnCrit").onclick = function(){
+  const b = $("#critBox");
+  const open = b.style.display === "none";
+  b.style.display = open ? "block" : "none";
+  this.textContent = open ? "收起" : "展开";
+};
+
+/* ---------- 视图 ---------- */
+document.querySelectorAll(".tabs button[data-v]").forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll(".tabs button[data-v]").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); VIEW = +b.dataset.v;
+    document.querySelectorAll(".view").forEach(v=>{
+      v.style.display = (+v.dataset.view === VIEW) ? "block" : "none";
+    });
+    render();
+  };
+});
+$("#rows").addEventListener("click", e => {
+  const grp = e.target.closest(".grp[data-grp]");    // 点分组条 = 收起 / 展开这一组
+  if(grp){
+    const k = grp.dataset.grp;
+    COLLAPSED.has(k) ? COLLAPSED.delete(k) : COLLAPSED.add(k);
+    renderRows();
+    return;
+  }
+  const cn = e.target.closest(".cellname");          // 点名字 = 展开/收起完整路径
+  if(cn){ cn.closest(".tr").classList.toggle("openpath"); return; }
+  const row = e.target.closest(".tr");
+  if(!row || row.dataset.dir !== "1") return;
+  openExpand(row.dataset.path);
+});
+
+/* ---------- 右键菜单 ---------- */
+const CTX = $("#ctx");
+function hideCtx(){ CTX.classList.remove("show"); }
+function copyText(t){
+  if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t);
+  const ta = document.createElement("textarea"); ta.value = t;
+  document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  return Promise.resolve();
+}
+function ctxBtn(label, fn){
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.onclick = ev => { ev.stopPropagation(); fn(b); };
+  return b;
+}
+function showCtx(x, y, path, isDir){
+  CTX.innerHTML = "";
+  CTX.appendChild(ctxBtn(isDir ? "📂 打开这个文件夹" : "📂 在资源管理器中显示", () => {
+    jpost("/api/open", {path}).then(r => { if(!r.ok) showErr(r.error || "打开失败"); });
+    hideCtx();
+  }));
+  CTX.appendChild(ctxBtn("📋 复制完整路径", b => {
+    copyText(path).then(() => { b.textContent = "✓ 已复制"; setTimeout(hideCtx, 550); });
+  }));
+  CTX.appendChild(ctxBtn("📄 复制文件名", b => {
+    copyText(path.replace(/[\\/]+$/, "").split(/[\\/]/).pop())
+      .then(() => { b.textContent = "✓ 已复制"; setTimeout(hideCtx, 550); });
+  }));
+  if(isDir){
+    CTX.appendChild(Object.assign(document.createElement("div"), {className:"sep"}));
+    CTX.appendChild(ctxBtn("🔍 看看里面有什么", () => { hideCtx(); openExpand(path); }));
+    CTX.appendChild(ctxBtn("🔎 就扫描这个文件夹", () => { hideCtx(); startScan(path); }));
+  }
+  CTX.classList.add("show");
+  CTX.style.left = Math.min(x, innerWidth  - CTX.offsetWidth  - 8) + "px";
+  CTX.style.top  = Math.min(y, innerHeight - CTX.offsetHeight - 8) + "px";
+}
+document.addEventListener("contextmenu", e => {
+  const row = e.target.closest(".tr[data-path]");
+  if(!row){ hideCtx(); return; }
+  e.preventDefault();
+  showCtx(e.clientX, e.clientY, row.dataset.path, row.dataset.dir === "1");
+});
+document.addEventListener("click", hideCtx);
+window.addEventListener("blur", hideCtx);
+window.addEventListener("scroll", hideCtx, true);
+$("#unsure").addEventListener("click", e => {     // ④ 那一屏的目录也能点开
+  const row = e.target.closest(".tr");
+  if(!row || row.dataset.dir !== "1") return;
+  openExpand(row.dataset.path);
+});
+/* 表头点击排序：与 WizTree / TreeSize 等分析类工具一致的操作方式 */
+document.querySelectorAll(".thc[data-k]").forEach(th=>{
+  th.onclick = ()=>{
+    const k = th.dataset.k;
+    if(SORT_KEY === k) SORT_DIR = -SORT_DIR;            // 再点一次 = 反向
+    else { SORT_KEY = k; SORT_DIR = DEFAULT_DIR[k] || -1; }
+    syncSort(); render();
+  };
+});
+syncSort();
+const MASK_LABEL = ["关", "路径", "路径＋文件名"];
+$("#btnMask").onclick = function(){
+  MASK = (MASK + 1) % 3;
+  this.classList.toggle("on", MASK >= 1);
+  this.textContent = "脱敏：" + MASK_LABEL[MASK];
+  $("#curPath").textContent = maskPath(PICKED);
+  $("#pkCur").textContent = maskPath(PICKED);
+  render();
+};
+/* 工具条：搜索 / 筛选 / 分组开关 */
+$("#q").addEventListener("input", function(){ QUERY = this.value; renderRows(); });
+document.querySelectorAll("#fltChips [data-act]").forEach(b=>{
+  b.onclick = ()=>{
+    const a = b.dataset.act;
+    if(a === "all"){
+      ACT_FILTER = new Set(["删","看","留"]);
+    } else {
+      ACT_FILTER.has(a) ? ACT_FILTER.delete(a) : ACT_FILTER.add(a);
+      if(!ACT_FILTER.size) ACT_FILTER = new Set(["删","看","留"]);   // 一个都不勾＝全看
+    }
+    renderRows();
+  };
+});
+$("#grpToggle").onclick = function(){
+  GROUP_ON = !GROUP_ON;
+  this.classList.toggle("on", GROUP_ON);
+  this.textContent = GROUP_ON ? "按动作分组" : "全局排序";
+  renderRows();
+};
+
+/* 载入哪一次的结果 —— 之前只能载最新那一份，20 份缓存在那儿躺着没法挑 */
+async function loadCache(file){
+  const r = await jget("/api/replay?file="+encodeURIComponent(file));
+  if(!r.ok) return showErr(r.error);
+  ITEMS = r.data.items || []; CURSOR = ITEMS.length;
+  FILE_COUNT = r.data.file_count || r.data.total_entries || 0;
+  DEDUP = r.data.dedup || null;
+  USAGE = r.data.usage || null;
+  SCAN_STATS = r.data.scan_stats || null;
+  JOB_CACHE = file;
+  SCAN_ROOT = r.data.root || "";
+  if(r.data.root){ PICKED = r.data.root; }
+  COLLAPSED = new Set(); QUERY = ""; ACT_FILTER = new Set(["删","看","留"]);
+  $("#q").value = "";
+  $("#curPath").textContent = maskPath(PICKED) + "（回放 " + file + "）";
+  $("#cacheDlg").classList.remove("show");
+  render(); $("#statusBar").style.display="none";
+}
+$("#btnCache").onclick = async () => {
+  const c = await jget("/api/caches?meta=1");
+  if(!c.ok || !c.caches.length) return showErr("还没有缓存结果。先扫一次。");
+  $("#cacheList").innerHTML = c.caches.map(x=>{
+    const file = (typeof x === "string") ? x : x.file;
+    const root = (typeof x === "string") ? "" : (x.root || "");
+    const when = (typeof x === "string") ? file.replace(".json","") : (x.created || file.replace(".json",""));
+    const cnt  = (typeof x === "string" || x.file_count == null) ? "" : x.file_count.toLocaleString() + " 文件";
+    const sz   = (typeof x === "string" || !x.total_size) ? "" : fsize(x.total_size);
+    return `<div class="ditem" data-file="${esc(file)}" title="${esc(maskPath(root))}">
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(maskPath(root) || "（这次没记下目录）")}</span>
+      <span class="tiny tx3" style="width:150px;text-align:right">${esc(when)}</span>
+      <span class="tiny tx3" style="width:130px;text-align:right">${esc(cnt)}${sz?" · "+sz:""}</span>
+    </div>`;
+  }).join("");
+  $("#cacheDlg").classList.add("show");
+};
+$("#cacheDlg").addEventListener("click", e => {
+  const it = e.target.closest(".ditem[data-file]");
+  if(it){ loadCache(it.dataset.file); return; }
+  if(e.target.id === "cacheDlg") $("#cacheDlg").classList.remove("show");
+});
+$("#ckClose").onclick = $("#ckOk").onclick = () => $("#cacheDlg").classList.remove("show");
+
+/* ---------- 展开一个目录：解释"折叠"是怎么回事 ---------- */
+async function openExpand(path){
+  $("#expander").classList.add("show");
+  $("#exSub").textContent = "读数据中…"; $("#exList").innerHTML = ""; $("#exNote").textContent = "";
+  const r = await jget("/api/expand?path=" + encodeURIComponent(path));
+  if(!r.ok){ $("#exSub").textContent = r.error || "打不开"; return; }
+  $("#exSub").innerHTML = `<b style="font-weight:500">${esc(maskPath(path))}</b>`
+    + `　共 <b style="font-weight:500">${r.count.toLocaleString()}</b> 个文件 · ${fsize(r.total_size)}`
+    + (r.capped ? `（文件太多，只统计了前 ${r.count.toLocaleString()} 个）` : "")
+    + (() => { const skip = (r.links_skipped||0) + (r.other_skipped||0);
+        return skip ? `　·　另有 ${skip.toLocaleString()} 项未计入（目录联接、符号链接等，它们的体积记在各自的真实位置）` : ""; })();
+  $("#exList").innerHTML = r.items.length
+    ? r.items.map((x,i)=>`<div class="ditem" style="cursor:default">
+        <span class="tx3 tiny" style="width:22px">${i+1}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="${esc(maskPath(x.rel))}">${esc(maskName(x.name))}</span>
+        <span class="tiny tx3" style="width:64px;text-align:right">${fsize(x.size)}</span>
+        <span class="tiny tx3" style="width:78px;text-align:right">${esc(x.mtime)}</span>
+      </div>`).join("")
+    : `<div class="tx3 tiny" style="padding:14px">里面没有可读的文件</div>`;
+  $("#exNote").textContent = `上面按体积从大到小列了前 ${r.items.length} 个 —— 这一条在列表里就算「1 项」。`;
+}
+$("#expander").addEventListener("click", e => {
+  if(e.target.id === "expander") $("#expander").classList.remove("show");
+});
+$("#exClose").onclick = $("#exOk").onclick = () => $("#expander").classList.remove("show");
+
+/* ---------- 心跳 + 自动退出提示 + 手动关闭 ---------- */
+setInterval(() => {
+  if(document.visibilityState === "visible" && ITEMS.length) jget("/api/ping").catch(()=>{});
+}, 30000);
+$("#btnQuit").onclick = async () => {
+  if(!confirm("关闭这个本地服务？关掉之后界面会失效，下次要用重新双击 start.bat。")) return;
+  try { await jpost("/api/shutdown", {}); } catch(e){}
+  document.body.innerHTML = '<div style="padding:60px;text-align:center;font:15px/1.8 sans-serif;color:#2C2C2A">'
+    + '服务已关闭。<br><span style="font-size:13px;color:#5F5E5A">可以关掉这个页面了。下次双击 jev-disk-mvp 里的 start.bat 重新启动。</span></div>';
+};
+
+function syncChips(n){
+  document.querySelectorAll("#fltChips [data-act]").forEach(b=>{
+    const a = b.dataset.act;
+    b.classList.toggle("on", a === "all" ? ACT_FILTER.size === 3 : ACT_FILTER.has(a));
+  });
+  if(n == null) n = fltItems(ITEMS, QUERY, ACT_FILTER)
+    .filter(it => !(GROUP_ON && COLLAPSED.has(bucketOf(it)))).length;
+  $("#listCnt").textContent = ITEMS.length ? `显示 ${n} / 共 ${ITEMS.length} 条` : "";
+}
+function render(){
+  renderMetrics();
+  if(VIEW===0) renderRows();
+  else if(VIEW===1) renderCompose();
+  else if(VIEW===2) renderYears();
+  else renderUnsure();
+}
+boot();
+</script>
+</body>
+</html>

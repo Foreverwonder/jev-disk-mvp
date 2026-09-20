@@ -1,0 +1,519 @@
+# 可用性修复 · 改动清单
+# 目录：jev-disk-mvp    对比：_backup/usability-fix-20260920-161743/ → 当前
+# 生成：2026-09-20 16:27:15
+
+index.html   +212 / -35  (439 行差异)
+server.py    +44 / -2  (69 行差异)
+config.json  +0 / -0  (0 行差异)
+
+--- a/index.html
++++ b/index.html
+@@ -143,6 +143,20 @@
+ .proglist{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--tx3);
+   max-height:34px;overflow:hidden}
+ .err{color:var(--red-tx);font-size:12px;white-space:pre-wrap}
++/* ── 清单出口：搜索 / 筛选 / 折叠（可用性修复轮） ── */
++.ltools{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
++.ltools input{flex:0 0 220px;padding:5px 9px;border:1px solid var(--line);border-radius:6px;
++  font-size:12px;background:#fff;color:#2C2C2A;font-family:inherit}
++.ltools input:focus{outline:none;border-color:#85B7EB;box-shadow:0 0 0 2px var(--blue-bg)}
++#fltChips{display:flex;gap:6px;flex-wrap:wrap}
++.chip{font-size:11.5px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;
++  background:#fff;color:var(--tx3);cursor:pointer;font-family:inherit;white-space:nowrap}
++.chip.on{background:var(--blue-bg);border-color:#B5D4F4;color:var(--blue-tx)}
++.chip:hover{border-color:#85B7EB}
++.grp{cursor:pointer;user-select:none}
++.grp:hover{background:var(--blue-bg)}
++.grp.folded{opacity:.7}
++.grpcar{font-size:10px;color:var(--tx3)}
+ </style>
+ </head>
+ <body>
+@@ -212,12 +226,25 @@
+ 
+   <!-- ① 处置 -->
+   <div class="card view" data-view="0" style="margin-top:0">
++    <div class="ltools">
++      <input id="q" placeholder="搜名字 / 路径 / 类别…" autocomplete="off" spellcheck="false">
++      <span id="fltChips">
++        <button class="chip on" data-act="all" title="恢复成全部">全部</button>
++        <button class="chip on" data-act="删">可以删</button>
++        <button class="chip on" data-act="看">先看一眼</button>
++        <button class="chip on" data-act="留">建议不清理</button>
++      </span>
++      <span class="grow"></span>
++      <button class="chip on" id="grpToggle"
++        title="按「该做什么」分组；关掉就按当前列全局排序">按动作分组</button>
++      <span class="tiny tx3" id="listCnt"></span>
++    </div>
+     <div class="tbl" id="tbl">
+       <div class="th">
+         <span>#</span>
+         <span>对象</span>
+         <span class="thc" data-k="size" style="text-align:right">体积<i class="car"></i></span>
+-        <span class="thc" data-k="conf" title="JEV 自报的把握度 —— 点这列排序，没把握的会浮上来" style="text-align:right">把握<i class="car"></i></span>
++        <span class="thc" data-k="conf" title="JEV 自报的把握度。默认按「该做什么」分组，点这列是在**组内**排序 —— 想看全局最小把握，把右边「按动作分组」关掉" style="text-align:right">把握<i class="car"></i></span>
+         <span class="thc" data-k="kind">类别<i class="car"></i></span></div>
+       <div id="rows"></div>
+     </div>
+@@ -299,6 +326,22 @@
+       <span class="tiny" id="pkCur" style="font-family:ui-monospace,Consolas,monospace"></span>
+       <span class="grow"></span>
+       <button class="primary" id="pkOk">就用这个文件夹</button>
++    </div>
++  </div>
++</div>
++
++<div class="mask" id="cacheDlg">
++  <div class="dlg">
++    <div class="h">
++      <b style="font-weight:500">载入哪一次的结果</b>
++      <span class="grow"></span>
++      <button class="tiny" id="ckClose">关闭</button>
++    </div>
++    <div class="dlist" id="cacheList"></div>
++    <div class="f">
++      <span class="tiny muted">回放只是读存档，不会再调用 JEV，不花额度。</span>
++      <span class="grow"></span>
++      <button class="primary" id="ckOk">取消</button>
+     </div>
+   </div>
+ </div>
+@@ -330,6 +373,12 @@
+ let JOB = null, POLL = null, CURSOR = 0, FLASH = new Map();   // path → 加入时刻；超过 0.7s 自动失效
+ let DEDUP = null, PREV_ITEMS = null, SHOW_DIFF = false, JOB_CACHE = null;
+ let FILE_COUNT = 0, USAGE = null, SCAN_STATS = null;
++/* ── 可用性修复轮新增 ── */
++let SCAN_ROOT = "";                        // 本次扫描的根：按落点要相对它分组（不是相对主目录）
++let COLLAPSED = new Set();                 // 收起的分组（按动作）
++let QUERY = "";                            // 清单搜索词
++let ACT_FILTER = new Set(["删","看","留"]); // 清单筛选：勾了哪几组
++let GROUP_ON = true;                       // 是否按动作分组（关掉 = 全局按列排序）
+ /* ── 第一性原理：用户只有两个动作（删 / 不删），所以按「动作」分组，不按模型档位分组。
+       三组：可以删 / 先看一眼 / 建议不清理。分组是界面规则，不改变 JEV 的结论。 ── */
+ const GATE_TX = {1: "第1关没认出来", 2: "第2关定档", 3: "走到第3关", 4: "第4关按组复核"};
+@@ -386,6 +435,45 @@
+   return base.slice(0, MASK_KEEP) + "•••" + ext;
+ }
+ function isPriv(n){ const l = String(n||"").toLowerCase(); return PRIV_PAT.some(p => l.includes(p)); }
++
++/* 脱敏：整条路径。
++   老实现只盖「主目录里的用户名」，文件名那一段从没管过 —— 结果名字列打码了，
++   展开的完整路径还是原样，截图发出去照样泄漏。MASK=2 起逐段盖，盘符留着。 */
++function maskPath(p){
++  const s = mask(p);
++  if(MASK < 2) return s;
++  return s.split(/([\\/])/).map(seg =>
++    (!seg || seg === "\\" || seg === "/" || /^[A-Za-z]:$/.test(seg)) ? seg : maskName(seg)
++  ).join("");
++}
++
++/* 按落点：相对「本次扫描的根」分组。
++   老实现剥的是用户主目录 —— 扫 C 盘以外的盘一个都匹配不上，
++   所有条目全归到 "D:" 一格，整页变成一根 100% 的柱子，洞察也跟着变成废话。 */
++function locOf(p){
++  let rel = String(p || "");
++  for(const b of [SCAN_ROOT, HOME]){
++    if(b && rel.toLowerCase().startsWith(b.toLowerCase())){ rel = rel.slice(b.length); break; }
++  }
++  rel = rel.replace(/^[\\/]+/, "");
++  const seg = rel.split(/[\\/]/);
++  return seg.length > 1 ? seg[0] : "(根目录下的文件)";
++}
++
++/* 清单收窄：搜索 + 动作筛选。
++   原来 2000 条要滚 122 屏，且没有任何出口 —— 这一条是「能不能用起来」的分水岭。
++   ★ 折叠**不在这里**：折叠掉的组必须保留组头，否则一收起，那一组就从界面上
++     彻底消失，用户再也没法点开它（第一版就是这么错的，被端到端测试逮住）。 */
++function fltItems(items, q, acts){
++  const kw = String(q || "").trim().toLowerCase();
++  return (items || []).filter(it=>{
++    if(acts && !acts.has(bucketOf(it))) return false;
++    if(!kw) return true;
++    const hay = (String(it.name||"") + " " + String(it.path||"") + " "
++                 + String(KIND_TX[it.kind] || it.kind || "")).toLowerCase();
++    return hay.includes(kw);
++  });
++}
+ const esc = s => String(s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+ const fsize = b => b>=1073741824 ? (b/1073741824).toFixed(2)+" GB"
+                 : (b>=1048576 ? Math.round(b/1048576)+" MB" : Math.round(b/1024)+" KB");
+@@ -469,16 +557,19 @@
+   if(go){ e.preventDefault(); openPicker(go); }
+ });
+ $("#pkClose").onclick = () => $("#picker").classList.remove("show");
+-$("#pkOk").onclick = () => { $("#curPath").textContent = mask(PICKED); $("#picker").classList.remove("show"); };
++$("#pkOk").onclick = () => { $("#curPath").textContent = maskPath(PICKED); $("#picker").classList.remove("show"); };
+ $("#btnPick").onclick = () => openPicker(PICKED);
+ 
+ /* ---------- 扫描 ---------- */
+ async function startScan(p){
+   if(!p) return;
+-  PICKED = p; $("#curPath").textContent = mask(p);
++  PICKED = p; SCAN_ROOT = p; $("#curPath").textContent = maskPath(p);
+   $("#errBar").style.display="none";
+   $("#truncNote").style.display="none";
+   ITEMS = []; CURSOR = 0; FLASH.clear(); FILE_COUNT = 0;
++  SCAN_ROOT = p;                       // ★ 按落点要用它当基准
++  COLLAPSED = new Set(); QUERY = ""; ACT_FILTER = new Set(["删","看","留"]);
++  if($("#q")) $("#q").value = "";
+   PREV_ITEMS = null; DEDUP = null; JOB_CACHE = null; USAGE = null; SCAN_STATS = null; $("#diffCard").style.display = "none";
+   render();
+   $("#rows").innerHTML = "";
+@@ -509,6 +600,17 @@
+   if(r.ok) $("#jobTx").textContent = `已中止 ${r.cancelled} 个任务`;
+ };
+ 
++/* 把服务端这一帧的状态收进全局。★ 必须在 render() 之前调用。
++   老代码是先 render 后赋值，于是「归并 N 类」「最终 token 数」永远慢一拍；
++   而 done 那次 items 为空、压根不进 render 分支，这两个数字最后根本没机会上屏。 */
++function absorb(s){
++  if(s.file_count != null) FILE_COUNT = s.file_count;
++  if(s.dedup) DEDUP = s.dedup;
++  if(s.cache) JOB_CACHE = s.cache;
++  if(s.usage) USAGE = s.usage;
++  if(s.scan_stats) SCAN_STATS = s.scan_stats;
++}
++
+ function poll(){
+   clearTimeout(POLL);
+   POLL = setTimeout(async () => {
+@@ -518,8 +620,11 @@
+       s.items.forEach(x => FLASH.set(x.path, Date.now()));
+       ITEMS = ITEMS.concat(s.items);
+       CURSOR = s.cursor;
+-      render();
+     }
++    const grew = !!(s.items && s.items.length);
++    const fcChanged = (s.file_count != null && s.file_count !== FILE_COUNT);
++    absorb(s);                       // ★ 先吸收状态
++    if(grew || fcChanged) render();  // ★ 再渲染
+     let pct = s.total_entries ? Math.round(100*(s.judged||0)/s.total_entries) : 0;
+     if(!pct && s.state==="judging") pct = 40;
+     if(!pct && s.state==="scanning") pct = 12;
+@@ -528,7 +633,6 @@
+     $("#stTime").textContent = s.elapsed_ms ? (s.elapsed_ms/1000).toFixed(1)+" s" : "";
+     const bits = [];
+     if(s.file_count){
+-      FILE_COUNT = s.file_count;
+       let t = `读到 ${s.file_count.toLocaleString()} 个文件`;
+       if(s.scan_ms){
+         const sec = Math.max(s.scan_ms / 1000, 0.05);
+@@ -555,12 +659,10 @@
+       $("#truncNote").textContent = "⚠ 文件数超过上限，扫描被截断 —— 结果不完整，换一个更小的目录会更准。";
+     }
+     if(s.error){ stopButtons("重新扫描"); showErr(s.error+"\n"+(s.trace||"")); return; }
+-    if(s.dedup) DEDUP = s.dedup;
+-    if(s.cache) JOB_CACHE = s.cache;
+-    if(s.usage) USAGE = s.usage;
+-    if(s.scan_stats) SCAN_STATS = s.scan_stats;
+     if(s.state === "done" || s.state === "cancelled"){
+       stopButtons("重新扫描");
++      render();      // ★ 补最后一帧：done 那次通常没有新条目，不补这一下，
++                     //   概要行和列表脚注就永远停在倒数第二次的数字上
+       if(s.state === "cancelled"){
+         $("#stPhase").textContent = s.phase || "已中止";
+         if((s.cancel_why||"").indexOf("顶掉") >= 0)
+@@ -656,9 +758,11 @@
+ function sorted(){
+   const r = ITEMS.slice();
+   r.sort((a,b)=>{
+-    const d = BO[bucketOf(a)] - BO[bucketOf(b)];   // 先按「该做什么」分组
+-    if(d) return d;
+-    const v = cmpKey(a, b, SORT_KEY);               // 组内按当前列
++    if(GROUP_ON){
++      const d = BO[bucketOf(a)] - BO[bucketOf(b)];  // 先按「该做什么」分组（可关）
++      if(d) return d;
++    }
++    const v = cmpKey(a, b, SORT_KEY);               // 再按当前列
+     if(v) return SORT_DIR * v;
+     return b.size - a.size;
+   });
+@@ -686,23 +790,28 @@
+   return `<div class="tiny tx3" style="margin-top:4px">${esc(GATE_TX[it.gate]||"没问损失分")}</div>`;
+ }
+ function renderRows(){
+-  const r = sorted();
++  const r = fltItems(sorted(), QUERY, ACT_FILTER);
++  const isFolded = bk => GROUP_ON && COLLAPSED.has(bk);   // 折叠只影响「条目画不画」，不影响组头
+   let html = "", lastT = null;
+   r.forEach((it,i)=>{
+     const bk = bucketOf(it);
+     if(bk !== lastT){
+       lastT = bk;
++      if(GROUP_ON){
+       const grp = r.filter(x => bucketOf(x) === bk);
+       const sz  = grp.reduce((a,b)=> a + b.size, 0);
+       const avg = grp.reduce((a,b)=> a + rc(b), 0) / Math.max(grp.length, 1);
+       const label = (UI.bucket_labels || {})[bk] || bk;
+-      html += `<div class="grp b-${esc(bk)}">
+-        <span></span>
+-        <div class="bl">${esc(label)}　<span class="tiny" style="font-weight:400">${grp.length} 项</span></div>
++      html += `<div class="grp b-${esc(bk)}${COLLAPSED.has(bk) ? " folded" : ""}" data-grp="${esc(bk)}"
++        title="点一下收起 / 展开这一组">
++        <span class="grpcar">${COLLAPSED.has(bk) ? "▸" : "▾"}</span>
++        <div class="bl">${esc(label)}　<span class="tiny" style="font-weight:400">${grp.length} 项${isFolded(bk) ? " · 已收起" : ""}</span></div>
+         <span class="tiny" style="text-align:right">${fsize(sz)}</span>
+         <span class="conf ${avg>=0.70?"hi":avg>=0.40?"mid":"lo"}" title="这一组 ${grp.length} 项的平均把握">${avg.toFixed(2)}<i><b style="width:${Math.round(avg*100)}%"></b></i></span>
+         <span></span></div>`;
++      }
+     }
++    if(isFolded(bk)) return;            // ★ 折叠的组：组头保留，条目跳过
+     const ws = warnShort(it);
+     const dg = it.degraded
+       ? `<span class="tag" style="background:#FDF0D5;color:#8A5A00;margin-right:5px" title="这一批请求没成功，这条结论是降级出来的 —— 请自己看一眼">没判出</span>`
+@@ -720,20 +829,28 @@
+       <span class="tx3" style="font-size:11px">${i+1}</span>
+       <div style="min-width:0" class="cellname" title="点击展开 / 收起完整路径">
+         <div class="nm">${dg}${pv}${esc(maskName(it.name))}${it.is_dir?' <span class="tx3" style="font-size:10px">›</span>':""}${ws?` <span class="wchip" title="${esc(warnLong(it))}">⚠ ${esc(ws)}</span>`:""}</div>
+-        <div class="fullpath">${esc(mask(it.path))}</div>
++        <div class="fullpath">${esc(maskPath(it.path))}</div>
+       </div>
+       <span style="text-align:right;font-size:12px">${fsize(it.size)}</span>
+       <span class="conf ${ccls}" title="${esc(ctip)}">${cc.toFixed(2)}<i><b style="width:${Math.round(cc*100)}%"></b></i></span>
+       <span class="tiny tx3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(KIND_TX[it.kind]||it.kind)}</span>
+     </div>`;
+   });
+-  $("#rows").innerHTML = html;
++  $("#rows").innerHTML = html || `<div class="tx3 tiny" style="padding:26px;text-align:center">`
++    + (ITEMS.length
++        ? "没有匹配的条目 —— 换个词，或把上面的筛选项都打开。"
++        : "还没有结果。点右上角「选择文件夹」，再点「开始扫描」。")
++    + `</div>`;
+   const shownBytes = ITEMS.reduce((a, b) => a + (b.size || 0), 0);
+   const totBytes = (SCAN_STATS && SCAN_STATS.bytes) || 0;
+   const cov = (totBytes > 0 && shownBytes > 0)
+     ? `　·　覆盖 ${fsize(shownBytes)} / 扫到 ${fsize(totBytes)}（${Math.round(shownBytes / totBytes * 100)}%）`
+     : "";
+-  $("#shown").textContent = ITEMS.length ? `${r.length} 项` + cov : "选个文件夹 → 开始扫描";
++  const shownN = r.filter(it => !isFolded(bucketOf(it))).length;
++  $("#shown").textContent = ITEMS.length
++    ? `${shownN} 项` + (shownN !== ITEMS.length ? ` / 共 ${ITEMS.length} 条` : "") + cov
++    : "选个文件夹 → 开始扫描";
++  syncChips(shownN);
+   const u = USAGE, ss = SCAN_STATS;
+   const links = (ss && ss.links_skipped) ? ` · 跳过 ${ss.links_skipped.toLocaleString()} 个链接` : "";
+   const avgAll = ITEMS.length ? ITEMS.reduce((a,b)=>a+rc(b),0)/ITEMS.length : 0;
+@@ -756,11 +873,7 @@
+   ITEMS.forEach(it=>{
+     const k = it.kind || "unknown";
+     byK[k] = byK[k] || {size:0, n:0}; byK[k].size += it.size; byK[k].n++;
+-    let rel = it.path;
+-    if(HOME && rel.startsWith(HOME)) rel = rel.slice(HOME.length);
+-    rel = rel.replace(/^[\\/]+/,"");
+-    const seg = rel.split(/[\\/]/);
+-    let loc = seg.length>1 ? seg[0] : "(根目录下的文件)";
++    const loc = locOf(it.path);          // ★ 相对扫描根，不是相对主目录
+     byL[loc] = byL[loc] || {size:0, n:0}; byL[loc].size += it.size; byL[loc].n++;
+   });
+   const total = Object.values(byK).reduce((a,b)=>a+b.size,0) || 1;
+@@ -779,7 +892,7 @@
+     <span class="tiny tx3" style="text-align:right">${Math.round(d.size/total*100)}%</span></div>`).join("");
+   const top = kArr[0], topL = lArr[0];
+   $("#insight").innerHTML = (top && topL)
+-    ? `<div class="tiny muted">一句话洞察</div><div style="margin-top:3px">${fsize(total)} 里有 <b style="font-weight:500">${fsize(top[1].size)}</b> 是${esc(KIND_TX[top[0]]||top[0])}，其中最大的一块堆在 <b style="font-weight:500">${esc(maskName(topL[0]))}</b>。</div>`
++    ? `<div class="tiny muted">一句话洞察</div><div style="margin-top:3px">${fsize(total)} 里有 <b style="font-weight:500">${fsize(top[1].size)}</b> 是${esc(KIND_TX[top[0]]||top[0])}；这些条目里最大的一块落在 <b style="font-weight:500">${esc(maskName(topL[0]))}</b>${SCAN_ROOT?"（相对本次扫描的目录）":""}。</div>`
+     : "";
+ }
+ 
+@@ -978,6 +1091,13 @@
+   };
+ });
+ $("#rows").addEventListener("click", e => {
++  const grp = e.target.closest(".grp[data-grp]");    // 点分组条 = 收起 / 展开这一组
++  if(grp){
++    const k = grp.dataset.grp;
++    COLLAPSED.has(k) ? COLLAPSED.delete(k) : COLLAPSED.add(k);
++    renderRows();
++    return;
++  }
+   const cn = e.target.closest(".cellname");          // 点名字 = 展开/收起完整路径
+   if(cn){ cn.closest(".tr").classList.toggle("openpath"); return; }
+   const row = e.target.closest(".tr");
+@@ -1051,24 +1171,72 @@
+   MASK = (MASK + 1) % 3;
+   this.classList.toggle("on", MASK >= 1);
+   this.textContent = "脱敏：" + MASK_LABEL[MASK];
+-  $("#curPath").textContent = mask(PICKED);
+-  $("#pkCur").textContent = mask(PICKED);
++  $("#curPath").textContent = maskPath(PICKED);
++  $("#pkCur").textContent = maskPath(PICKED);
+   render();
+ };
+-$("#btnCache").onclick = async () => {
+-  const c = await jget("/api/caches");
+-  if(!c.ok || !c.caches.length) return showErr("还没有缓存结果。先扫一次。");
+-  const r = await jget("/api/replay?file="+encodeURIComponent(c.caches[0]));
++/* 工具条：搜索 / 筛选 / 分组开关 */
++$("#q").addEventListener("input", function(){ QUERY = this.value; renderRows(); });
++document.querySelectorAll("#fltChips [data-act]").forEach(b=>{
++  b.onclick = ()=>{
++    const a = b.dataset.act;
++    if(a === "all"){
++      ACT_FILTER = new Set(["删","看","留"]);
++    } else {
++      ACT_FILTER.has(a) ? ACT_FILTER.delete(a) : ACT_FILTER.add(a);
++      if(!ACT_FILTER.size) ACT_FILTER = new Set(["删","看","留"]);   // 一个都不勾＝全看
++    }
++    renderRows();
++  };
++});
++$("#grpToggle").onclick = function(){
++  GROUP_ON = !GROUP_ON;
++  this.classList.toggle("on", GROUP_ON);
++  this.textContent = GROUP_ON ? "按动作分组" : "全局排序";
++  renderRows();
++};
++
++/* 载入哪一次的结果 —— 之前只能载最新那一份，20 份缓存在那儿躺着没法挑 */
++async function loadCache(file){
++  const r = await jget("/api/replay?file="+encodeURIComponent(file));
+   if(!r.ok) return showErr(r.error);
+   ITEMS = r.data.items || []; CURSOR = ITEMS.length;
+   FILE_COUNT = r.data.file_count || r.data.total_entries || 0;
+   DEDUP = r.data.dedup || null;
+   USAGE = r.data.usage || null;
+-  JOB_CACHE = c.caches[0];
++  SCAN_STATS = r.data.scan_stats || null;
++  JOB_CACHE = file;
++  SCAN_ROOT = r.data.root || "";
+   if(r.data.root){ PICKED = r.data.root; }
+-  $("#curPath").textContent = mask(PICKED) + "（回放 " + c.caches[0] + "）";
++  COLLAPSED = new Set(); QUERY = ""; ACT_FILTER = new Set(["删","看","留"]);
++  $("#q").value = "";
++  $("#curPath").textContent = maskPath(PICKED) + "（回放 " + file + "）";
++  $("#cacheDlg").classList.remove("show");
+   render(); $("#statusBar").style.display="none";
++}
++$("#btnCache").onclick = async () => {
++  const c = await jget("/api/caches?meta=1");
++  if(!c.ok || !c.caches.length) return showErr("还没有缓存结果。先扫一次。");
++  $("#cacheList").innerHTML = c.caches.map(x=>{
++    const file = (typeof x === "string") ? x : x.file;
++    const root = (typeof x === "string") ? "" : (x.root || "");
++    const when = (typeof x === "string") ? file.replace(".json","") : (x.created || file.replace(".json",""));
++    const cnt  = (typeof x === "string" || x.file_count == null) ? "" : x.file_count.toLocaleString() + " 文件";
++    const sz   = (typeof x === "string" || !x.total_size) ? "" : fsize(x.total_size);
++    return `<div class="ditem" data-file="${esc(file)}" title="${esc(maskPath(root))}">
++      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(maskPath(root) || "（这次没记下目录）")}</span>
++      <span class="tiny tx3" style="width:150px;text-align:right">${esc(when)}</span>
++      <span class="tiny tx3" style="width:130px;text-align:right">${esc(cnt)}${sz?" · "+sz:""}</span>
++    </div>`;
++  }).join("");
++  $("#cacheDlg").classList.add("show");
+ };
++$("#cacheDlg").addEventListener("click", e => {
++  const it = e.target.closest(".ditem[data-file]");
++  if(it){ loadCache(it.dataset.file); return; }
++  if(e.target.id === "cacheDlg") $("#cacheDlg").classList.remove("show");
++});
++$("#ckClose").onclick = $("#ckOk").onclick = () => $("#cacheDlg").classList.remove("show");
+ 
+ /* ---------- 展开一个目录：解释"折叠"是怎么回事 ---------- */
+ async function openExpand(path){
+@@ -1076,7 +1244,7 @@
+   $("#exSub").textContent = "读数据中…"; $("#exList").innerHTML = ""; $("#exNote").textContent = "";
+   const r = await jget("/api/expand?path=" + encodeURIComponent(path));
+   if(!r.ok){ $("#exSub").textContent = r.error || "打不开"; return; }
+-  $("#exSub").innerHTML = `<b style="font-weight:500">${esc(mask(path))}</b>`
++  $("#exSub").innerHTML = `<b style="font-weight:500">${esc(maskPath(path))}</b>`
+     + `　共 <b style="font-weight:500">${r.count.toLocaleString()}</b> 个文件 · ${fsize(r.total_size)}`
+     + (r.capped ? `（文件太多，只统计了前 ${r.count.toLocaleString()} 个）` : "")
+     + (() => { const skip = (r.links_skipped||0) + (r.other_skipped||0);
+@@ -1085,7 +1253,7 @@
+     ? r.items.map((x,i)=>`<div class="ditem" style="cursor:default">
+         <span class="tx3 tiny" style="width:22px">${i+1}</span>
+         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+-              title="${esc(mask(x.rel))}">${esc(maskName(x.name))}</span>
++              title="${esc(maskPath(x.rel))}">${esc(maskName(x.name))}</span>
+         <span class="tiny tx3" style="width:64px;text-align:right">${fsize(x.size)}</span>
+         <span class="tiny tx3" style="width:78px;text-align:right">${esc(x.mtime)}</span>
+       </div>`).join("")
+@@ -1108,6 +1276,15 @@
+     + '服务已关闭。<br><span style="font-size:13px;color:#5F5E5A">可以关掉这个页面了。下次双击 jev-disk-mvp 里的 start.bat 重新启动。</span></div>';
+ };
+ 
++function syncChips(n){
++  document.querySelectorAll("#fltChips [data-act]").forEach(b=>{
++    const a = b.dataset.act;
++    b.classList.toggle("on", a === "all" ? ACT_FILTER.size === 3 : ACT_FILTER.has(a));
++  });
++  if(n == null) n = fltItems(ITEMS, QUERY, ACT_FILTER)
++    .filter(it => !(GROUP_ON && COLLAPSED.has(bucketOf(it)))).length;
++  $("#listCnt").textContent = ITEMS.length ? `显示 ${n} / 共 ${ITEMS.length} 条` : "";
++}
+ function render(){
+   renderMetrics();
+   if(VIEW===0) renderRows();
+
+--- a/server.py
++++ b/server.py
+@@ -14,6 +14,7 @@
+ import concurrent.futures
+ import heapq
+ import json
++import re
+ import math
+ import os
+ import string
+@@ -1136,6 +1137,45 @@
+         job["state"] = "error"
+         job["error"] = "%s" % e
+         job["trace"] = traceback.format_exc()[-1200:]
++
++
++_CACHE_HEAD_RE = re.compile(
++    r'"(root|created|file_count|total_size)"\s*:\s*("(?:[^"\\]|\\.)*"|null|-?[\d.eE+]+)')
++
++
++def cache_meta(name):
++    """把「这是哪一次扫描」从缓存文件里捡出来，供界面挑着回放。
++
++    整个文件可能好几 MB，20 个全读进来太慢 —— 而 root / created / file_count /
++    total_size 在 json.dump 时是排在最前面的几个键，读开头 2KB 足够。
++    （读不到的字段一律给 None，界面自己兜底，不编。）"""
++    out = {"file": name, "root": None, "created": None,
++           "file_count": None, "total_size": None}
++    try:
++        with open(os.path.join(CACHE_DIR, name), encoding="utf-8") as f:
++            head = f.read(2048)
++    except Exception:
++        return out
++    found = {}
++    for m in _CACHE_HEAD_RE.finditer(head):
++        found.setdefault(m.group(1), m.group(2))
++    if "root" in found:
++        try:
++            out["root"] = json.loads(found["root"])
++        except Exception:
++            out["root"] = found["root"].strip('"')
++    if "created" in found:
++        try:
++            out["created"] = json.loads(found["created"])
++        except Exception:
++            out["created"] = found["created"].strip('"')
++    for k in ("file_count", "total_size"):
++        if k in found and found[k] != "null":
++            try:
++                out[k] = int(float(found[k]))
++            except Exception:
++                pass
++    return out
+ 
+ 
+ def save_cache(root, job):
+@@ -1349,8 +1389,10 @@
+                                        "jobs": [job_brief(j) for j in js[:12]]})
+             if p == "/api/caches":
+                 os.makedirs(CACHE_DIR, exist_ok=True)
+-                names = sorted([f for f in os.listdir(CACHE_DIR) if f.endswith(".json")], reverse=True)
+-                return self._send({"ok": True, "caches": names[:20]})
++                names = sorted([f for f in os.listdir(CACHE_DIR) if f.endswith(".json")], reverse=True)[:20]
++                if q.get("meta", ["0"])[0] in ("1", "true", "yes"):
++                    return self._send({"ok": True, "caches": [cache_meta(n) for n in names]})
++                return self._send({"ok": True, "caches": names})
+             if p == "/api/replay":
+                 name = os.path.basename(q.get("file", [""])[0])
+                 fp = os.path.join(CACHE_DIR, name)
+
+

@@ -1,0 +1,126 @@
+{
+  "_comment": "JEV 硬盘体检 · 全部可调参数都在这里，代码里不写死任何判据",
+
+  "model": "jev-1.13.0",
+
+  "scan": {
+    "min_size_mb": 1,
+    "max_items": 2000,
+    "_max_items_comment": "条目上限。600 条时 D 盘覆盖率只有 84%（挤掉 29GB）；2000 条升到 ~97%。实测归纳不限条目时 D 盘有 2386 个条目",
+    "collapse_min_files": 12,
+    "collapse_ratio": 4.0,
+    "collapse_max_gb": 4,
+    "_collapse_max_gb_comment": "超过这个体积的「又大又碎」目录不整块折叠，改往下拆一层。否则 D:\\wechat 58.94GB 会变成一行，看不出里面是什么",
+    "max_file_scan": 2000000,
+    "_max_file_scan_comment": "文件数上限。实测 D 盘整盘 118 万文件（扫 12.9s + 归纳 8.6s），所以上限放到 200 万",
+    "skip_at_root": ["System Volume Information", "$Recycle.Bin", "Config.Msi", "$WinREAgent",
+                     "Windows", "Program Files", "Program Files (x86)", "ProgramData",
+                     "$Windows.~BT", "Recovery", "PerfLogs", "OneDriveTemp"],
+    "skip_path_fragments": ["node_modules\\.cache", "node_modules/.cache", "CacheStorage"],
+    "reserved": ["nul", "con", "aux", "prn", "com1", "com2", "com3", "com4", "lpt1", "lpt2", "lpt3"]
+  },
+
+  "privacy": {
+    "_comment": "文件名命中这些词时，界面给红色提醒（截图前该打码）",
+    "name_patterns": ["私聊", "群聊", "聊天记录", "聊天", "密码", "password", "passwd",
+                      "secret", "token", "apikey", "api_key", "身份证", "银行卡",
+                      "流水", "体检", "诊断", "病历", "简历", "工资", "合同", "发票"],
+    "mask_name_keep": 4
+  },
+
+  "weights": {
+    "shrink_floor": 0.6,
+    "age_max": 0.25,
+    "age_full_days": 365
+  },
+
+  "rules": {
+    "kind_num_cap": {
+      "program_body": 1.0,
+      "app_state": 1.0,
+      "unknown": 1.5,
+      "user_content": 2.0
+    },
+    "low_conf_threshold": 0.4,
+    "low_conf_cap": 1.2,
+    "mid_conf_threshold": 0.5,
+    "kind_conf_floor": 0.5,
+    "_kind_conf_floor_comment": "模型对「这是什么」的把握低于这个数，结论一律封顶在「慎重」——连是什么都不知道，不许建议删",
+    "swing_gap": 0.2,
+    "swing_top2_min": 0.25,
+    "_swing_comment": "类别分布里第 1 名领先第 2 名不足 swing_gap、且第 2 名不低于 swing_top2_min 时，标注「在两类之间摇摆」",
+    "loss_kinds": ["regenerable_cache", "build_output", "installer"],
+    "_loss_kinds_comment": "只有这些类别会进入第 3 关问「删除损失」——程序本体/应用状态/用户产出在第 2 关就定档为「别碰」，根本不该问删不删",
+    "dedup": true,
+    "verdict_cap_by_kind": {
+      "program_body": "别碰",
+      "app_state": "别碰",
+      "user_content": "别碰",
+      "unknown": "慎重"
+    }
+  },
+
+  "gates": {
+    "_comment": "四关编排的问法 —— 这里就是「标准」本身。界面上改完可以一键全盘重判，不用重启。",
+    "state_prefix": "下面是 Windows 电脑上一次只读扫描得到的较大目录/文件清单。机主是个人开发者，机器上混装开发工具、AI 客户端、聊天软件、个人文档与素材。只依据给出的信息判断，不要臆造没给出的内容；信息不足就选 unknown。",
+    "recognize": "只看这个对象的名称、所在路径、体积、文件数和内部构成，你能认出它大概是什么吗？1.0 表示完全认得出，0.0 表示完全看不出。",
+    "recognize_floor": 0.5,
+    "_recognize_floor_comment": "第 1 关的门槛：低于它直接判「看不懂」，后面几关不再问——省 token，也杜绝「连是什么都不知道却建议删」",
+    "kind": "候选 %d 属于哪一类？",
+    "loss": "如果把候选 %d 永久删除（不进回收站、直接消失），对机主来说损失有多大？请特别考虑它能否通过重新运行程序、重新下载、重新编译拿回来。",
+    "batch": "这组对象特征几乎相同（同类目录或文件，共 %d 个）：%s。它们的处理方式应该完全一致吗？",
+    "batch_options": {
+      "按组处理": "这一组性质一致，按同一个结论对待",
+      "有例外": "组里可能混了个别不该动的对象，需要逐条确认"
+    }
+  },
+
+  "criteria": {
+    "kinds": {
+      "regenerable_cache": "缓存或日志，程序重新运行就会再生",
+      "installer": "安装包，软件装完之后它本身就没用了",
+      "program_body": "程序或依赖的本体，删了对应软件会坏掉",
+      "app_state": "应用状态数据（配置、登录态、聊天记录、游戏存档）",
+      "user_content": "用户自己产出的内容（文档、照片、视频、素材）",
+      "build_output": "构建产物，有源代码就能重新生成",
+      "unknown": "信息不足，看不出来"
+    },
+    "deletability": [
+      "绝对不能删：删了无法恢复，会造成实际损失",
+      "最好留着：删了有代价，但勉强能补回来",
+      "可以删：能重新下载或重新生成，只是有点麻烦",
+      "放心删：随时能重建，删了毫无损失"
+    ]
+  },
+
+  "ui": {
+    "_comment": "界面层的分组规则 —— 只负责「怎么展示」，不改变模型结论。按第一性原理：用户只有两个动作，删 or 不删，所以按动作分组，不按模型档位分组。",
+    "bucket_labels": {
+      "删": "可以删",
+      "看": "先看一眼",
+      "留": "建议不清理"
+    },
+    "warn_conf": 0.6,
+    "_warn_conf_comment": "把握低于它的，即使模型说「可以考虑删」也一律挪进「先看一眼」——不替你打包票",
+    "warn_size_gb": 5,
+    "_warn_size_comment": "体积大于它的，也挪进「先看一眼」——超大件误删的代价不对称，值得要求更高把握（这是本工具最重要的一道安全闸）"
+  },
+
+  "batch": {
+    "size": 15,
+    "workers": 6,
+    "timeout_sec": 20,
+    "_timeout_comment": "单次请求超时。正常一次约 1 秒，20 秒足够；设太大（原 240 秒）会导致点「中止」后要等很久才停",
+    "retries": 3
+  },
+
+  "server": {
+    "_comment": "无人使用时会自己退出，避免服务一直挂着",
+    "host": "127.0.0.1",
+    "port": 8849,
+    "idle_shutdown_minutes": 20,
+    "open_browser": true,
+    "expand_max_files": 20000,
+    "expand_top": 40
+  }
+}

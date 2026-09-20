@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JEV 硬盘体检 · 项目评审报告</title>
+<style>
+  :root{
+    --ink:#12181f; --ink2:#3d4a57; --ink3:#6b7885; --line:#e3e8ee;
+    --bg:#f6f8fa; --card:#fff;
+    --red:#d92d20; --amber:#b54708; --green:#067647; --blue:#175cd3; --violet:#6938ef;
+    --p0:#d92d20; --p1:#b54708; --p2:#3d4a57;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:40px 24px 96px}
+
+  header.top{background:#fff;border:1px solid var(--line);border-radius:16px;padding:32px 34px;
+    box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .kicker{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+  h1{font-size:31px;line-height:1.3;margin:12px 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--ink2);font-size:15.5px;margin:0}
+  .verdict{margin-top:22px;padding:18px 20px;background:#f0f4f8;border-left:4px solid var(--blue);
+    border-radius:0 10px 10px 0;font-size:16.5px;color:var(--ink)}
+  .verdict b{color:var(--blue)}
+
+  .hero{display:flex;align-items:center;gap:28px;margin-top:26px;flex-wrap:wrap}
+  .score-big{display:flex;align-items:baseline;gap:6px}
+  .score-big .n{font-size:56px;font-weight:800;letter-spacing:-.03em;line-height:1}
+  .score-big .d{font-size:20px;color:var(--ink3);font-weight:600}
+  .score-note{color:var(--ink2);font-size:14.5px;max-width:520px}
+
+  h2{font-size:22px;margin:46px 0 6px;letter-spacing:-.01em}
+  h2 .num{color:var(--ink3);font-weight:700;margin-right:8px;font-variant-numeric:tabular-nums}
+  h2+.lead{color:var(--ink2);font-size:15px;margin:0 0 20px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
+    margin-bottom:16px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .card h3{margin:0 0 10px;font-size:17px}
+  .card p{margin:0 0 10px}
+  .card p:last-child{margin-bottom:0}
+
+  .dim-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .bar{flex:1;min-width:180px;height:8px;background:#eef1f5;border-radius:99px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#1d4ed8,#2f6fed)}
+  .score-tab{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .score-tab em{font-style:normal;color:var(--ink3);font-weight:600;font-size:13px}
+
+  .pro-con{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+  @media(max-width:720px){.pro-con{grid-template-columns:1fr}}
+  .box{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fcfdfe}
+  .box h4{margin:0 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+  .box.good h4{color:var(--green)} .box.bad h4{color:var(--red)}
+  .box ul{margin:0;padding-left:19px}
+  .box li{margin-bottom:6px;font-size:14.7px;line-height:1.65;color:var(--ink2)}
+  .box li:last-child{margin-bottom:0}
+  .box li b{color:var(--ink)}
+
+  code,.mono{font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:13.4px}
+  code{background:#f0f3f7;padding:1.5px 5px;border-radius:5px;color:#0b3d91}
+
+  .evi{margin-top:8px}
+  .evi table{width:100%;border-collapse:collapse;font-size:14.4px}
+  .evi th{text-align:left;padding:9px 12px;border-bottom:2px solid var(--line);color:var(--ink3);
+    font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+  .evi td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2)}
+  .evi td:first-child{color:var(--ink);font-weight:600;width:34%}
+  .evi .num{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
+  .evi .hint{font-size:13px;color:var(--ink3);display:block;margin-top:3px}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:5px;
+    letter-spacing:.04em;vertical-align:1px}
+  .tag.ok{background:#e7f6ee;color:var(--green)}
+  .tag.fix{background:#fdeceb;color:var(--red)}
+  .tag.new{background:#fff3e0;color:var(--amber)}
+
+  .bug{border-left:4px solid var(--red);background:#fff;border-radius:0 12px 12px 0;
+    padding:16px 20px;margin-bottom:14px;border-top:1px solid var(--line);
+    border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .bug.warn{border-left-color:var(--amber)}
+  .bug h3{margin:0 0 4px;font-size:16px}
+  .bug .path{font-size:12.6px;color:var(--ink3);margin-bottom:9px}
+  .bug p{margin:0 0 8px;font-size:14.8px;color:var(--ink2)}
+  .bug p:last-child{margin-bottom:0}
+
+  .plan{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:720px){.plan{grid-template-columns:1fr}}
+  .p-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+    box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .p-card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+  .p-card h3{margin:0;font-size:16.4px}
+  .p-card p{margin:0 0 9px;font-size:14.6px;color:var(--ink2)}
+  .p-card .meta{font-size:13.2px;color:var(--ink3);display:flex;gap:14px;flex-wrap:wrap}
+  .p-card .meta b{color:var(--ink2)}
+  .star{color:#e8a33d;font-size:14px;white-space:nowrap;letter-spacing:1px}
+
+  .opt{background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 0;overflow:hidden}
+  .opt-row{display:flex;gap:14px;padding:13px 20px;border-bottom:1px solid var(--line)}
+  .opt-row:last-child{border-bottom:0}
+  .lvl{flex:0 0 42px;font-size:12.5px;font-weight:800;letter-spacing:.03em;padding-top:2px}
+  .lvl.p0{color:var(--p0)} .lvl.p1{color:var(--p1)} .lvl.p2{color:var(--p2)}
+  .opt-body{flex:1}
+  .opt-body .t{font-weight:650;font-size:15.1px;margin-bottom:3px}
+  .opt-body .d{font-size:14.4px;color:var(--ink2);line-height:1.65}
+  .opt-body .f{margin-top:5px;font-size:12.9px;color:var(--ink3)}
+
+  .quote{background:#fff;border:1px dashed #c7d0da;border-radius:12px;padding:18px 22px;
+    font-size:15.4px;line-height:1.8;color:var(--ink2)}
+  .quote b{color:var(--ink)}
+  .footer{margin-top:52px;padding-top:20px;border-top:1px solid var(--line);
+    font-size:13.4px;color:var(--ink3)}
+  .plain{font-size:15.2px;color:var(--ink2)}
+  .plain b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="kicker">Project Review · 2026-09-20</div>
+  <h1>JEV 硬盘体检 · 项目评审报告</h1>
+  <p class="sub">jev-disk-mvp／server.py 1,366 行 · index.html 1,109 行 · config.json 全参可调 · docs/ 17 份</p>
+
+  <div class="verdict">
+    一句话结论：<b>这不是"一个能用的清理工具"，是一份拿真实磁盘当靶子的 JEV 能力研究报告</b>，
+    而它把"AI 会承认自己看不懂"这件事做成了可截图的产品。定位站得住、证据链完整、文档量级远超这类个人项目的常态。
+    真正拖后腿的不是设计，是<b>收尾一致性</b>——同一套修复只做了一半，以及几处"自称的数字和真实数字对不上"。
+  </div>
+
+  <div class="hero">
+    <div class="score-big"><span class="n">41.5</span><span class="d">/ 50</span></div>
+    <div class="score-note">
+      五个维度里，<b>定位（9.0）</b>和<b>文档（8.5）、交互（8.5）</b>是强项；
+      <b>可用性（7.5）</b>因为三个实测出来的健壮性缺口被压分——但注意：<b>这三个缺口都是收尾问题，不是能力问题</b>。
+    </div>
+  </div>
+</header>
+
+<h2><span class="num">01</span>评分总览</h2>
+<p class="lead">每项 10 分制。评分依据全部来自实测或代码原文，不含印象分。</p>
+
+<div class="card">
+  <div class="dim-head">
+    <h3 style="margin:0">交互设计</h3>
+    <div class="bar"><i style="width:85%"></i></div>
+    <div class="score-tab">8.5 <em>/10</em></div>
+  </div>
+  <div class="pro-con">
+    <div class="box good"><h4>凭什么给到 8.5</h4><ul>
+      <li><b>按"动作"分组，不按模型档位分组。</b>理由写得很清楚：用户只有两个动作，删或不删。这是想过的，不是抄的。</li>
+      <li><b>把认知边界摊开给用户改。</b>「判断口径」面板能看到喂给模型的全部问题与选项，改完一键重判还有新旧 diff——这一步把黑箱变成了可辩论的对象。</li>
+      <li><b>不确定性被做成了视觉语言：</b>概率分布条、摇摆标记、把握度分压、三档筛选。</li>
+      <li><b>为"截图发出去"专门设计：</b>三态脱敏（关／遮路径／遮路径+文件名）、文件名命中敏感词弹红色提醒。</li>
+      <li>状态反馈完整：进度条、四关阶段文案、中止、错误、空态、结果缓存回放。</li>
+    </ul></div>
+    <div class="box bad"><h4>扣在哪</h4><ul>
+      <li><b>键盘与无障碍基本为零。</b>弹窗没有 Esc、行不能方向键选、<code>button</code> 没有 focus 样式、纯 div 表格对读屏器不友好。</li>
+      <li><b>长列表全量重绘。</b>每次渲染重建整个 <code>#rows</code>，分组计数里还有一处按组过滤的重复扫描，叠加 700ms 轮询，行数一多就闪。</li>
+      <li><b>轮询有竞态。</b>重判或新扫描时旧轮询没被作废，旧任务返回的数据还能追加上去。</li>
+      <li><b>阈值有两套。</b>分组用的是可配置的 <code>warn_conf</code>，行颜色和分档 chip 里却写死了 0.4／0.6 —— 改了口径，颜色和分组会对不上。</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="dim-head">
+    <h3 style="margin:0">可用性</h3>
+    <div class="bar"><i style="width:75%"></i></div>
+    <div class="score-tab">7.5 <em>/10</em></div>
+  </div>
+  <div class="pro-con">
+    <div class="box good"><h4>凭什么给到 7.5</h4><ul>
+      <li><b>双击 <code>start.bat</code> 就跑完。</b>自动找 Python、自动开浏览器、首次粘贴 key 后不再问；零第三方依赖，纯标准库。</li>
+      <li>没人用 20 分钟自动退出，不留后台残骸；关窗口就等于停服务。</li>
+      <li>能中止（遍历／归纳／签名三处都有检查点）、文件数超限会明说"结果不完整"。</li>
+      <li>每次扫描都落缓存，可"载入上次结果"回放——录屏时不用重跑，这条是为演示专门加的。</li>
+      <li><b>性能实测可信：</b>我独立复核 D 盘 121 万文件遍历 8.2 秒（≈14.8 万文件/秒），与它声称的 11.5 万文件/秒同量级，<b>没有吹</b>。</li>
+    </ul></div>
+    <div class="box bad"><h4>扣在哪（三条是我实测出来的）</h4><ul>
+      <li><b>一批请求失败，整个任务就废，已判结果全丢。</b>实测注入"一半批次失败"→ 异常直接冒到任务层，已经成功判完的那些批一个字都没留下。<b>这是录屏现场最大的风险。</b></li>
+      <li><b>模型少回一个 <code>confidence</code> 字段就崩。</b>实测 → <code>TypeError</code>，同样是全任务作废。</li>
+      <li><b>"点开看里面"和主扫描口径不一致。</b>同一台机器、D 盘 7,745 个 junction，主扫描跳它、"看里面"却钻进去——实测同一个目录 <b>0 个文件 vs 20,000 个文件</b>。</li>
+      <li>key 明文落在 <code>key.txt</code>（虽已进 <code>.gitignore</code>）。</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="dim-head">
+    <h3 style="margin:0">项目文档完整性</h3>
+    <div class="bar"><i style="width:85%"></i></div>
+    <div class="score-tab">8.5 <em>/10</em></div>
+  </div>
+  <div class="pro-con">
+    <div class="box good"><h4>凭什么给到 8.5</h4><ul>
+      <li><b>17 份文档、约 138 KB，</b>设计史从 v2 一路留到 v8，能看出思路怎么被推翻的。</li>
+      <li><code>HANDOFF.md</code> 是我见过的个人项目里质量前列的交接文档：一句话定位、"代码 vs 模型谁在干活"的分工表、7 条关键决策、13 条踩坑表、文件地图，连"本机 shell 是坏的"都写了。</li>
+      <li><code>JEV-功劳核查.md</code> 主动把自己写的规则和模型给的判断分开记账——还如实写了"我的规则 8 条全判反了"。<b>愿意给自己记负分，这在个人项目里非常少见。</b></li>
+      <li>README 有"已知边界"章节，把做不到的事明写出来（看不懂文件内容、不知道你还在不在用）。</li>
+    </ul></div>
+    <div class="box bad"><h4>扣在哪</h4><ul>
+      <li><b>一张真截图都没有。</b>只有字符画的界面设计稿，外部读者无从判断成品长什么样。</li>
+      <li><b>不是 git 仓库。</b>没有版本历史、没有 LICENSE、没有 CHANGELOG。</li>
+      <li><b>没有架构图</b>，数据流只靠文字分工表描述。</li>
+      <li><b>测试不是可复跑的文件。</b>四关编排的 20 项断言写在审查报告里，没有落地成测试脚本——下次改代码，这 20 项无法自动重跑。</li>
+      <li><b>数字会腐烂。</b>文档里留了两处互相打架的旧值（star 数 342 vs 697）、文件数 208,250 vs 208,283，还残留着"os.walk 扫的"这种代码里早已不用的表述。</li>
+      <li><b>有一句准备拿去传播的结论，被自己更晚的证据推翻了</b>（详见下面第 5 条缺口）。这不是造假的错，是"从一批样本上得出的规律被当成了通用规律"——但它出现在最显眼的位置，发出去之前必须改口。</li>
+      <li>同类信息散在三处：README 面向用户、HANDOFF 面向接手者、docs 面向自己。没有一份"给外部读者看"的入口文档——真有人点开你的分享，他该先看哪份？</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="dim-head">
+    <h3 style="margin:0">项目意图与定位</h3>
+    <div class="bar"><i style="width:90%"></i></div>
+    <div class="score-tab">9.0 <em>/10</em></div>
+  </div>
+  <div class="pro-con">
+    <div class="box good"><h4>凭什么给到 9.0 —— 这是全项目最强的一环</h4><ul>
+      <li><b>定位选了反面：反 360。</b>"别的清理工具替你下判断，这个工具告诉你它有多不确定。"在同质化的 AI 晒图里，这是稀缺角度。</li>
+      <li><b>对自己的定位没有装。</b>计划书第一行就写"目标是做一点能吹牛、能截图、能录屏的东西，不是真清理工具"——把野心和边界一起说清楚。</li>
+      <li><b>意图与实现高度一致。</b>全程只读、界面里清清楚楚<b>没有任何删除入口</b>。更关键的是：发现之前多份文档里写着"删除按钮是演示态"，而代码里根本没有这个按钮，于是公开改口并留下记录。<b>为了不吹牛，宁可承认自己之前写的是空头承诺。</b></li>
+      <li>审查报告 L5 自己写了最有力的推翻角度，然后承认"这次演示数据太干净，是边界"。</li>
+    </ul></div>
+    <div class="box bad"><h4>扣在哪</h4><ul>
+      <li><b>定位里有没解开的张力：</b>一个"只负责看"的工具，最后一步必须用户自己去资源管理器动手；它自己也承认"不是清理建议的权威"。这决定了它的传播价值大于使用价值——倒也不影响它原本的目标。</li>
+      <li><b>5 GB 安全闸是个后加的补丁，不是体系。</b>它来自一次真实危险（差点误删正在用的模型），补得很及时，但"模型判错时靠什么兜底"没有被系统化成一条通用规则——本次实测里就有一条 2.895 GB 的条目从 5 GB 的缝里穿了过去。</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="dim-head">
+    <h3 style="margin:0">第一性原理执行落地</h3>
+    <div class="bar"><i style="width:80%"></i></div>
+    <div class="score-tab">8.0 <em>/10</em></div>
+  </div>
+  <div class="pro-con">
+    <div class="box good"><h4>凭什么给到 8.0</h4><ul>
+      <li><b>第一性原理真的落到了代码里，不是写在 PPT 上：</b>删错代价远大于少删 → 置信度做折扣不做加分；mtime 只加不减（否则误伤活跃缓存）；类别给可删性设上限（模型确实把"程序本体"判成过可删）；结论词语义锚定而非数值切档（按数值切会让顶档永远空）。每一条都能指到具体代码。</li>
+      <li><b>性能是真做了根因分析：</b>发现 <code>os.stat</code> 每文件都要 CreateFile 会被杀软逐个拦，改用 <code>scandir</code> 复用 DirEntry 缓存（8 倍）；发现 <code>islink()</code> 对 junction 返回 False、必须查重解析位（重入 pnpm 联接网）；发现归纳是 O(候选目录 × 文件数)，重写成两趟 O(目录)。</li>
+      <li><b>编排不是花架子，省钱有数：</b>我端到端实跑 <code>E:\whisper_models</code>——158 文件／8 条压成 6 类／<b>4 次请求</b>／6,806 input token／<b>$0.000286</b>／<b>3.0 秒</b>。</li>
+      <li><b>成果可独立验证：</b>它 3 秒内指出的唯一一条"可以删"，正是 <code>whisper-large-v3-openvino\encoder</code>（2.895 GB）——我打开这个目录核实过，里面干干净净只有一个 <code>model_cache</code>，是真正可再生的那 2.9 GB。人工核查了半天的结论，工具自己指到了同一个地方。</li>
+    </ul></div>
+    <div class="box bad"><h4>扣在哪</h4><ul>
+      <li><b>同一套第一性原理只传导了一半。</b>主扫描路径改掉了 junction 和 <code>os.stat</code>，"点开看里面"那条路径<b>一行没改</b>——正好是同一个坑。这说明修复是按"哪里疼修哪里"做的，没有回头扫同类。</li>
+      <li><b>打分模型的参数只有 30 条小样校准</b>（置信折扣下限 0.6、陈旧加成 0.25、满额 365 天、各类别封顶）。样本太小，换目录要重新看——文档自己也承认了。</li>
+      <li><b>技术债作者自己记了：</b>定档逻辑散在两处（第 2 关直判 + 第 3 关 <code>verdict_of</code>），将来改档位要两处一起改。</li>
+      <li>全项目没有一个自动化测试文件。</li>
+    </ul></div>
+  </div>
+</div>
+
+<h2><span class="num">02</span>它是怎么跑的（数据流与分工）</h2>
+<p class="lead">这张图是整个项目的核心事实：<b>文件系统给事实，模型给语义，作者写的规则给框架。</b>三种颜色的方框分别代表这三层。带红点的位置是本次评审实测出的风险点。</p>
+
+<div class="card" style="padding:20px 18px">
+<svg viewBox="0 0 940 400" width="100%" role="img" aria-label="JEV 硬盘体检数据流图">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <style>
+    .st{font:600 13px -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+    .sb{font:11.5px "Cascadia Mono",Consolas,monospace;fill:#64748b}
+    .tt{font:700 12px -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;letter-spacing:.08em}
+    .rt{font:12px -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;fill:#64748b}
+  </style>
+
+  <!-- lane 1: 文件系统 -->
+  <rect x="4" y="30" width="164" height="150" rx="11" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text class="tt" x="16" y="52" fill="#475569">文件系统 · 事实</text>
+  <rect x="16" y="62" width="140" height="30" rx="7" fill="#fff" stroke="#94a3b8"/>
+  <text class="st" x="26" y="82" fill="#12181f">scandir 遍历</text>
+  <rect x="16" y="98" width="140" height="30" rx="7" fill="#fff" stroke="#94a3b8"/>
+  <text class="st" x="26" y="118" fill="#12181f">重解析位跳 junction</text>
+  <rect x="16" y="134" width="140" height="30" rx="7" fill="#fff" stroke="#94a3b8"/>
+  <text class="st" x="26" y="154" fill="#12181f">折叠 + 特征签名</text>
+  <text class="sb" x="16" y="174">collect_files / build_entries</text>
+
+  <!-- lane 2: JEV -->
+  <rect x="196" y="30" width="196" height="150" rx="11" fill="#faf8ff" stroke="#c4b5fd"/>
+  <text class="tt" x="208" y="52" fill="#6938ef">JEV 判断模型 · 语义</text>
+  <rect x="208" y="62" width="172" height="24" rx="7" fill="#fff" stroke="#a78bfa"/>
+  <text class="st" x="218" y="79" fill="#12181f">① noul　认得出吗</text>
+  <rect x="208" y="90" width="172" height="24" rx="7" fill="#fff" stroke="#a78bfa"/>
+  <text class="st" x="218" y="107" fill="#12181f">② choice　是哪一类</text>
+  <rect x="208" y="118" width="172" height="24" rx="7" fill="#fff" stroke="#a78bfa"/>
+  <text class="st" x="218" y="135" fill="#12181f">③ score　删了亏多少</text>
+  <rect x="208" y="146" width="172" height="24" rx="7" fill="#fff" stroke="#a78bfa"/>
+  <text class="st" x="218" y="163" fill="#12181f">④ choice　这组一致吗</text>
+
+  <!-- lane 3: 规则 -->
+  <rect x="420" y="30" width="188" height="150" rx="11" fill="#fffbf5" stroke="#fcd9a4"/>
+  <text class="tt" x="432" y="52" fill="#b54708">作者写的规则 · 框架</text>
+  <rect x="432" y="62" width="164" height="30" rx="7" fill="#fff" stroke="#f0b968"/>
+  <text class="st" x="442" y="82" fill="#12181f">置信度做折扣不加分</text>
+  <rect x="432" y="98" width="164" height="30" rx="7" fill="#fff" stroke="#f0b968"/>
+  <text class="st" x="442" y="118" fill="#12181f">类别封顶 + 置信闸门</text>
+  <rect x="432" y="134" width="164" height="30" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+  <text class="st" x="442" y="154" fill="#7c2d12">⚠ ≥5GB 硬闸门</text>
+  <text class="sb" x="432" y="174">config.json 全部可调</text>
+
+  <!-- lane 4: 界面 -->
+  <rect x="636" y="30" width="150" height="150" rx="11" fill="#f5fdf9" stroke="#a7e3c6"/>
+  <text class="tt" x="648" y="52" fill="#067647">界面 · 只读输出</text>
+  <rect x="648" y="62" width="126" height="30" rx="7" fill="#e7f6ee" stroke="#6fd3a4"/>
+  <text class="st" x="658" y="82" fill="#065f46">可以删</text>
+  <rect x="648" y="98" width="126" height="30" rx="7" fill="#eef2ff" stroke="#93a8f0"/>
+  <text class="st" x="658" y="118" fill="#1e3a8a">先看一眼</text>
+  <rect x="648" y="134" width="126" height="30" rx="7" fill="#f1f5f9" stroke="#b6c2cf"/>
+  <text class="st" x="658" y="154" fill="#334155">建议不清理</text>
+  <text class="sb" x="648" y="174">无删除入口，全程只读</text>
+
+  <!-- arrows -->
+  <line x1="170" y1="105" x2="192" y2="105" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="394" y1="105" x2="416" y2="105" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="610" y1="105" x2="632" y2="105" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- 回环：低把握升级 -->
+  <path d="M636,196 L636,214 L298,214 L298,196" fill="none" stroke="#6938ef" stroke-width="1.4"
+        stroke-dasharray="5 4" marker-end="url(#ar)"/>
+  <text class="rt" x="330" y="230" fill="#6938ef">把握度低 → 不上台面，落进「先看一眼」</text>
+
+  <!-- bottom: 实测风险点 -->
+  <rect x="4" y="258" width="782" height="126" rx="11" fill="#fff5f5" stroke="#f6b3ad"/>
+  <text class="tt" x="18" y="280" fill="#d92d20">本次实测出的四个风险点（都在收尾环节，不是能力问题）</text>
+
+  <circle cx="24" cy="301" r="3.5" fill="#d92d20"/>
+  <text class="rt" x="36" y="305" fill="#3d4a57"><tspan font-weight="700" fill="#12181f">一批请求失败 → 整个扫描作废</tspan>　judge_pipeline/round_run 异常冒到任务层，已判结果从不写回 job["items"]</text>
+
+  <circle cx="24" cy="327" r="3.5" fill="#d92d20"/>
+  <text class="rt" x="36" y="331" fill="#3d4a57"><tspan font-weight="700" fill="#12181f">「点开看里面」没跟着修</tspan>　expand_dir 仍在用 os.walk + islink + os.stat；实测同一目录 0 个文件 vs 20,000 个文件</text>
+
+  <circle cx="24" cy="353" r="3.5" fill="#b54708"/>
+  <text class="rt" x="36" y="357" fill="#3d4a57"><tspan font-weight="700" fill="#12181f">模型少回一个 confidence 字段就崩</tspan>　score_entry 里 min(1.0, None) → TypeError</text>
+
+  <circle cx="24" cy="379" r="3.5" fill="#b54708"/>
+  <text class="rt" x="36" y="383" fill="#3d4a57"><tspan font-weight="700" fill="#12181f">界面自称的调用次数与真实值不一致</tspan>　屏幕写"只判了 6 次"，同屏脚注 usage.requests = 4</text>
+
+  <!-- right legend -->
+  <rect x="800" y="258" width="136" height="126" rx="11" fill="#f8fafc" stroke="#e3e8ee"/>
+  <text class="tt" x="812" y="280" fill="#64748b">怎么读这张图</text>
+  <text class="rt" x="812" y="302" fill="#3d4a57">蓝灰 = 纯数据</text>
+  <text class="rt" x="812" y="322" fill="#3d4a57">紫 = 只有模型能给</text>
+  <text class="rt" x="812" y="342" fill="#3d4a57">橙 = 防模型判错</text>
+  <text class="rt" x="812" y="362" fill="#3d4a57">绿 = 只读输出</text>
+  <text class="rt" x="812" y="376" fill="#94a3b8">没有一层可以单独成立</text>
+</svg>
+</div>
+
+<h2><span class="num">03</span>我自己跑的实测取证</h2>
+<p class="lead">以下每一条都是我在这台机器上真实跑出来的，不是读代码推测。项目文件全程只读，没有改动。</p>
+
+<div class="evi card">
+<table>
+  <tr><th>测的东西</th><th>结果</th><th>判断</th></tr>
+  <tr>
+    <td>端到端能不能跑起来</td>
+    <td>起服务 → 扫 <code>E:\whisper_models</code> → 出结果，全程 <span class="num">3.0 秒</span>；读到 158 文件；8 条归并成 6 类；<span class="num">4 次</span>请求；<span class="num">6,806</span> input token≈<span class="num">$0.000286</span></td>
+    <td><span class="tag ok">通过</span><span class="hint">真的能跑，成本可忽略</span></td>
+  </tr>
+  <tr>
+    <td>它判得对不对</td>
+    <td>唯一进"可以删"的是 <code>…\openvino\encoder</code> 2.895 GB。我打开这个目录核实：里面只有一个 <code>model_cache</code>，确属可再生缓存。23 GB 的 <code>blobs</code> 被判 <code>program_body</code> 0.55 → 结论"别碰"</td>
+    <td><span class="tag ok">判对</span><span class="hint">和人工核查结论一致</span></td>
+  </tr>
+  <tr>
+    <td>声称的扫描性能有没有吹</td>
+    <td>我独立遍历 D 盘：<span class="num">1,211,759</span> 文件 + 133,579 目录，用时 <span class="num">8.2 秒</span>≈14.8 万文件/秒。它声称 115,002 文件/秒</td>
+    <td><span class="tag ok">同量级</span><span class="hint">性能数字可信</span></td>
+  </tr>
+  <tr>
+    <td>会往磁盘上漏 key 吗</td>
+    <td>检查本次产出的 cache 文件：不含 <code>apikey</code>、不含 <code>TYPESAFE_API_KEY</code></td>
+    <td><span class="tag ok">干净</span></td>
+  </tr>
+  <tr>
+    <td>junction 在两条路径上一致吗</td>
+    <td>自建 junction 对照：主扫描 <span class="num">0 文件 / 0 字节</span>（正确跳过），"点开看里面" <span class="num">3 文件 / 6 MB</span>（钻进去了）。<br>拿真实目录复现：<code>D:\dshbuild\…\node_modules</code>（510 个 junction 子项）→ <span class="num">0 vs 20,000</span></td>
+    <td><span class="tag fix">实测缺陷</span><span class="hint">同一个 bug 只修了一半</span></td>
+  </tr>
+  <tr>
+    <td>一批请求挂了会怎样</td>
+    <td>注入"一半批次失败"→ 异常冒到任务层，<b>已成功判完的批次结果全部丢弃</b>（<code>run_job</code> 的异常分支只写 error，不写 items）</td>
+    <td><span class="tag fix">实测缺陷</span><span class="hint">演示现场一崩全崩</span></td>
+  </tr>
+  <tr>
+    <td>模型少回一个字段会怎样</td>
+    <td>让 <code>score</code> 答案缺 <code>confidence</code> → <code>TypeError: '&lt;' not supported between instances of 'NoneType' and 'float'</code>，同样全任务作废</td>
+    <td><span class="tag fix">实测缺陷</span><span class="hint">没做字段兜底</span></td>
+  </tr>
+  <tr>
+    <td>界面上自称的数字对不对</td>
+    <td>进度栏写"只判了 <span class="num">6</span> 次"，同一个屏的脚注 <code>usage.requests</code> 是 <span class="num">4</span>——代码把"类数"当成了"请求次数"<code>(server.py L965-966)</code></td>
+    <td><span class="tag new">新增发现</span><span class="hint">正是这个项目最擅长抓的那类错</span></td>
+  </tr>
+</table>
+</div>
+
+<h2><span class="num">04</span>五个值得先修的缺口</h2>
+<p class="lead">严重度按"会不会在录屏现场翻车"和"会不会让懂行的人一眼看穿"来排。前四条是代码，第五条是说法。</p>
+
+<div class="bug">
+  <h3>1 · 一批请求失败 → 整个扫描作废 <span class="tag fix">最高优</span></h3>
+  <div class="path mono">server.py · judge_pipeline 的 round_run（约 L761-762）＋ run_job 的异常分支（L969-972）</div>
+  <p>并发器是 <code>list(ex.map(work, batches))</code>，任何一批抛异常都会在迭代时冒出去，一路穿到 <code>run_job</code>；而 <code>run_job</code> 的 <code>except</code> 只写 <code>job["error"]</code> 和 <code>job["trace"]</code>，<b>从不写 <code>job["items"]</code></b>。</p>
+  <p>后果很具体：你扫 2,000 条、跑到第 30 批的时候网络抖一下，前面 29 批白跑了，屏幕上只剩一行报错。录屏演示时这等于把之前所有镜头废掉。</p>
+  <p>改法很小：在 <code>round_run</code> 里把 <code>work</code> 包一层 try/except，失败的批记进 <code>job["batch_errors"]</code> 并保持该类的字段为 None；汇总时跳过未判的并提示"本次有 N 批未判"。已判的部分照常出结果。</p>
+</div>
+
+<div class="bug">
+  <h3>2 · 模型少给一个字段就崩 <span class="tag fix">同一处改动可一并解决</span></h3>
+  <div class="path mono">server.py · score_entry L626 · verdict_of 调用处 L882 · row_conf 计算 L882</div>
+  <p><code>score_entry</code> 里 <code>min(1.0, conf)</code> 和 <code>row_conf = min([x for x in (dc, kc) if x is not None] or [dc])</code> 都没有兜住 <code>None</code>。实测把答案里的 <code>confidence</code> 拿掉，直接 <code>TypeError</code>。</p>
+  <p>这不是假想场景：<code>noul</code> 类型的返回本来就没有 <code>confidence</code>（笔记里写明了），不同原语字段不一样，靠"默认一定有"是赌运气。</p>
+  <p>改法：取置信度时统一走一个小函数 <code>_conf(x, default=0.0)</code>，缺字段就当 0 处理（缺字段本来就等于"它没表态"，压向别删是正确方向）。</p>
+</div>
+
+<div class="bug warn">
+  <h3>3 · junction 只修了主扫描，没修"点开看里面" <span class="tag new">我自己挖出来的</span></h3>
+  <div class="path mono">server.py · expand_dir L69-81（仍在用 os.walk + os.path.islink + os.stat 全路径）</div>
+  <p>主扫描里那三个坑写得明明白白（<code>os.walk</code> 会走进 junction、<code>islink</code> 拦不住、<code>os.stat</code> 慢 8 倍），<code>expand_dir</code> 却三个坑一个不落全踩了。同一份代码、同一个 bug、修了一半。</p>
+  <p>实测对照：<code>D:\dshbuild\clean-home2\profiles\node_modules</code>（510 个 junction 子目录）——主扫描返回 <b>0 个文件</b>，<code>expand_dir</code> 返回 <b>20,000 个文件</b>（撞上限）并用掉 1.71 秒。</p>
+  <p>用户看到的是：点开某一行"看里面"，里面的体积比这一行本身显示的还大。<b>一个把"我承认我不确定"当卖点的工具，自己内部两组数字打架，这是最伤信任的失分点。</b></p>
+  <p>改法：<code>expand_dir</code> 直接改成复用 <code>collect_files</code>（它已经处理好了重解析位和 DirEntry 缓存），或至少把判断条件抄过来。大约 30 行。</p>
+</div>
+
+<div class="bug warn">
+  <h3>4 · 界面自称的调用次数和真实调用次数不一致 <span class="tag new">我自己挖出来的</span></h3>
+  <div class="path mono">server.py · L965-966</div>
+  <p><code>"完成 · %d 条归并成 %d 类，只判了 %d 次" % (entries, classes, classes)</code> —— 第三个占位符填的是<b>类数</b>，不是请求次数。实测这次屏幕上会写"只判了 6 次"，而同一个屏右下角的用量脚注写着 <code>requests: 4</code>。</p>
+  <p>为什么这条值得单独拎出来：这个项目的审查报告里，抓得最狠的就是"文档写了代码里没有的东西"。<b>这条属于同一个病，在四个版本、多轮对抗性审查之后活了下来。</b>改一行的事——把第三个参数换成 <code>job["usage"]["requests"]</code>。</p>
+</div>
+
+<div class="bug warn">
+  <h3>5 · 最漂亮的那句结论，被项目自己更晚的证据推翻了 <span class="tag new">口径问题，传播前必须改口</span></h3>
+  <div class="path mono">docs/JEV演示工具-计划书.md 附录（2026-09-20 凌晨） vs docs/JEV-功劳核查.md 第三节（同日 12:41）</div>
+  <p>计划书末尾留了一句准备拿去传播的结论：<b>"错判全部落在它自己说'我没把握'的那一堆里。"</b>这句话在它当时那批 30 个样本上站得住——6 个错判（<code>.git</code> 哈希名文件）的自报把握度是 0.00~0.17。</p>
+  <p>但同一天更晚、样本更认真的那份《功劳核查》里，E 盘 48 条只错了 1 条，而那一条<b>恰好是最重要的那个</b>：37GB 的 <code>whisper_models</code> 被它判成"可再生缓存"，<b>把握度 0.62</b>——不难看，也不算低。真正拦住它的是那道 5GB 的硬闸门，不是把握度。</p>
+  <p>所以那句营销话如果原样发出去，懂行的人只要问一句"那 0.62 那次怎么算"就破了。<b>而真实情况反而更有说服力：</b>小错它自己知道在猜（把握度 0.0~0.17），最危险的错它是真信了（0.62）。"看错"和"想歪"是两回事——前者靠把握度就能筛掉，后者必须靠不看模型脸色的硬闸门兜底。</p>
+  <p>建议：把结论升级成两层版本，并在 README 里把这条口径记下来。传播包里我已经按这个版本重写了，直接用那一版。</p>
+</div>
+
+<h2><span class="num">05</span>后续计划：六个候选（按性价比排序）</h2>
+<p class="lead">方向都朝着同一个目标：把"AI 会承认没把握"这个稀缺点，变成能反复出内容的内容源。</p>
+
+<div class="plan">
+  <div class="p-card">
+    <div class="top"><h3>A · JEV vs 大模型 同题对照跑</h3><span class="star">★★★★★</span></div>
+    <p>同一个目录，JEV 判一遍、某个通用大模型判一遍，把<b>耗时／成本／一致性</b>三列并排。</p>
+    <p>这是全篇含金量最高的内容：硬数字、可复现、天生适合当封面图。厂商宣称 193.6x 更快、444.6x 更便宜——<b>你现场跑出你自己的数字，比转述厂商有说服力得多</b>。</p>
+    <div class="meta"><span>工作量 <b>小</b></span><span>适合 <b>公众号＋朋友圈</b></span><span>风险 <b>低</b></span></div>
+  </div>
+
+  <div class="p-card">
+    <div class="top"><h3>B · 「它认怂指数」单页报告</h3><span class="star">★★★★★</span></div>
+    <p>扫完直接出一张图，头条不是"能省多少 GB"，而是<b>"这次扫的 N 条里，它敢拍胸脯的只有 X%"</b>，下面按把握度分三堆。</p>
+    <p>别人晒 AI 都在晒"它多准"，你晒"它知道自己不准"——这就是计划书里那句"最有品味"的展示，而它现在还没被做成成品。</p>
+    <div class="meta"><span>工作量 <b>小</b></span><span>适合 <b>小红书＋朋友圈</b></span><span>风险 <b>低</b></span></div>
+  </div>
+
+  <div class="p-card">
+    <div class="top"><h3>C · 误判博物馆（持续累积）</h3><span class="star">★★★★☆</span></div>
+    <p>专门收集"判错 + 它自己把握也低"的案例，一条条存档，做成一个越攒越厚的展馆。</p>
+    <p>最有力的一句已经在你手上：<b>"错判全部落在它自己说'我没把握'的那一堆里。"</b>这句有真实数据支撑，而且能长期更新——每换一台机器、每扫一个新目录都能加一条。</p>
+    <div class="meta"><span>工作量 <b>极小</b></span><span>适合 <b>系列内容</b></span><span>风险 <b>低</b></span></div>
+  </div>
+
+  <div class="p-card">
+    <div class="top"><h3>D · 人机对赌：你先判，它再揭晓</h3><span class="star">★★★★☆</span></div>
+    <p>你先给每条写"删／留"，然后揭晓模型的答案，统计<b>"人机分歧率"和"谁更保守"</b>。</p>
+    <p>互动性最强的一种：能做成公众号的投票、朋友圈的"你觉得这条能不能删"。副产品是一份真实的人机对齐数据，比单纯展示工具更有研究味。</p>
+    <div class="meta"><span>工作量 <b>中</b></span><span>适合 <b>互动内容</b></span><span>风险 <b>中（要避开隐私文件）</b></span></div>
+  </div>
+
+  <div class="p-card">
+    <div class="top"><h3>E · "删除代价秤"可视化</h3><span class="star">★★★☆☆</span></div>
+    <p>把 JEV 返回的四档损失分布做成一台天平：候选放左盘，四档权重块按概率大小落到右盘。</p>
+    <p>纯视觉记忆点，一眼就懂"它在权衡"。适合做录屏里的高光镜头，也适合当封面。但它依赖前端动画工作量，属于锦上添花。</p>
+    <div class="meta"><span>工作量 <b>中</b></span><span>适合 <b>视频封面</b></span><span>风险 <b>低</b></span></div>
+  </div>
+
+  <div class="p-card">
+    <div class="top"><h3>F · 一键出长图／九宫格</h3><span class="star">★★★☆☆</span></div>
+    <p>扫完直接吐小红书竖版长图和朋友圈方图，不用手动截、不用自己拼。</p>
+    <p>看着像打包功能，其实是<b>传播的最后一公里</b>：现在想发出去还得自己截图拼图，这一步的摩擦力直接决定你会不会连发十条。<b>前提是先确认脱敏默认开启。</b></p>
+    <div class="meta"><span>工作量 <b>中</b></span><span>适合 <b>全部平台</b></span><span>风险 <b>低（脱敏必须默认开）</b></span></div>
+  </div>
+</div>
+
+<h2><span class="num">06</span>下一步可落地的优化方案</h2>
+<p class="lead">P0 三条建议在录屏之前改完，全是小改动、低风险，直接决定镜头能不能一次过。</p>
+
+<div class="opt">
+  <div class="opt-row">
+    <div class="lvl p0">P0</div>
+    <div class="opt-body">
+      <div class="t">让单批失败不拖垮整个任务</div>
+      <div class="d">在 <code>round_run</code> 的 <code>work</code> 外层加 try/except，失败批记进 <code>job["batch_errors"]</code>；汇总循环里遇到未判的类跳过并在界面提示"本次 N 批未判"。<b>这是录屏现场唯一的保单。</b></div>
+      <div class="f">server.py · judge_pipeline / round_run · run_job</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p0">P0</div>
+    <div class="opt-body">
+      <div class="t">置信度缺字段一律兜成 0，不抛异常</div>
+      <div class="d">统一用一个取值函数：拿不到 <code>confidence</code> 就当 0（缺字段＝它没表态，压向"别删"是对的方向）。顺手把 <code>score_entry</code>、<code>row_conf</code> 两处都套上。</div>
+      <div class="f">server.py · score_entry L626 / L882</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p0">P0</div>
+    <div class="opt-body">
+      <div class="t">修掉"点开看里面"和主扫描的口径差</div>
+      <div class="d">让 <code>expand_dir</code> 复用 <code>collect_files</code>（重解析位 + DirEntry 缓存都是现成的），顺手把 <code>total_size</code> 在截断时改为如实标注"至少 N GB"。<b>改完两组数字就不会再互相打脸。</b></div>
+      <div class="f">server.py · expand_dir L64-94</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p0">P0</div>
+    <div class="opt-body">
+      <div class="t">把"只判了 N 次"改成真实请求数</div>
+      <div class="d">第三个占位符换成 <code>job["usage"]["requests"]</code>。一行改动，让同一屏上的两个数字对上。</div>
+      <div class="f">server.py · L965-966</div>
+    </div>
+  </div>
+
+  <div class="opt-row">
+    <div class="lvl p1">P1</div>
+    <div class="opt-body">
+      <div class="t">口径单点化：干掉写死的 0.4 / 0.6</div>
+      <div class="d">行颜色、分档 chip、四档筛选全部改读 <code>UI.warn_conf</code> 与 <code>rules.low_conf_threshold</code>，让"改口径"真的能全局生效——不然那个很漂亮的"一键重判"会给出前后矛盾的界面。</div>
+      <div class="f">index.html · tier() / confChip() / ccls / bucketOf</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p1">P1</div>
+    <div class="opt-body">
+      <div class="t">给轮询加世代号，作废过期请求</div>
+      <div class="d">每次 <code>startScan</code>／重判时递增一个 token，回调里比对不上就丢弃。顺手把 <code>visibilitychange</code> 与定时器的叠加收掉，避免切标签页繁殖出多个监视循环。</div>
+      <div class="f">index.html · poll() / watchJobs()</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p1">P1</div>
+    <div class="opt-body">
+      <div class="t">行渲染改增量，去掉 O(n²) 分组计数</div>
+      <div class="d">每组的计数算一次缓存起来，只在数据真变化时更新受影响的行——现在是每次轮询全量重建整个表格，几百行就会肉眼可见地闪。</div>
+      <div class="f">index.html · renderRows</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p1">P1</div>
+    <div class="opt-body">
+      <div class="t">补键盘操作：Esc 关窗、方向键选行、Enter 展开</div>
+      <div class="d">成本很低，但对"录屏时看起来专业"帮助很大——不用鼠标乱找，动作干净。<code>button</code> 补一个 <code>:focus-visible</code> 样式即可。</div>
+      <div class="f">index.html · 全局 keydown / picker / expander</div>
+    </div>
+  </div>
+
+  <div class="opt-row">
+    <div class="lvl p2">P2</div>
+    <div class="opt-body">
+      <div class="t">把这 20 项断言固化成能重跑的测试文件</div>
+      <div class="d">用标准库 <code>unittest</code> 写 <code>tests/test_gates.py</code>（保持零依赖），配一个 <code>run_tests.bat</code>。现在这 20 项只在报告里存在过一次，改代码无法回归。顺手把我这次挖出的三个故障注入案例也加进去。</div>
+      <div class="f">新增 tests/ · 参考 docs/四关编排-对抗性审查报告.md</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p2">P2</div>
+    <div class="opt-body">
+      <div class="t">git init + 补三张真截图 + 给数字标采集日期</div>
+      <div class="d"><code>.gitignore</code> 已经写好了（含 <code>key.txt</code> 和 <code>cache/</code>），初始化后务必确认 <code>git status</code> 里看不到 key。截图入 docs/，并在性能/成本数字旁标一行"采集于 2026-09-20，E 盘状态已变"——防止半年后被人拿旧数字对不上。</div>
+      <div class="f">仓库根目录 / docs/</div>
+    </div>
+  </div>
+  <div class="opt-row">
+    <div class="lvl p2">P2</div>
+    <div class="opt-body">
+      <div class="t">把 5 GB 闸门升级成通用规则</div>
+      <div class="d">现在的闸门只看体积，本次实测就有一条 2.895 GB 从缝里穿过去（这次它判对了，但那是运气不是机制）。建议加一条：<b>类别为"可再生缓存"但内部结构单一（只有一个子项）的，强制降一档到"先看一眼"</b>——因为这时模型看的其实是那个子项，而不是整块。</div>
+      <div class="f">config.json · ui.warn_* / rules.*</div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="num">07</span>一句话定位（可以直接用）</h2>
+<div class="quote">
+  <p><b>「我给 AI 装了个刹车，然后让它自己承认踩不住。」</b></p>
+  <p>别的清理工具是黑箱裁判，一口咬定"可以删"。这个不。它每给一条建议，都得附上自己的把握度；
+  连"这是什么东西"都没把握的，直接标"看不懂"，不许进建议删的那一档。
+  <b>它的价值不在替你多做决定，而在让自己少做错的决定。</b></p>
+</div>
+
+<div class="footer">
+  评审方式：文档全量阅读 + 代码逐行审查（server.py 1,366 行 / index.html 1,109 行）＋ 端到端实跑（真实 API）＋ 三项故障注入 ＋ 独立复核。
+  所有"实测"字样均为本机真实执行结果；所有"声称"字样均引自项目自带的 docs/，并已标注是否复核。
+  <b>评审未改动项目任何代码或配置</b>；唯一的落盘副作用是实跑一次扫描时工具自己写的
+  <code>cache/20260920-151102.json</code>（已在 <code>.gitignore</code> 里，可随时删）。
+</div>
+
+</div>
+</body>
+</html>

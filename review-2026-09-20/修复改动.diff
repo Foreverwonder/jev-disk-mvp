@@ -1,0 +1,311 @@
+# JEV 硬盘体检 · 本次修复改动（unified diff）
+#
+# 基线：_backup/pre-fix-20260920-152509/（改动前原件）
+# 对照：jev-disk-mvp/（当前）
+# 跑法：把基线拷回去即可整体回退。
+
+# server.py     +107 / -33 行
+# index.html    +8 / -2 行
+# config.json   +0 / -0 行
+
+--- a/server.py
++++ b/server.py
+@@ -62,33 +62,57 @@
+ 
+ 
+ def expand_dir(path, cap, top):
+-    """把一个文件夹拆开看里面有什么 —— 用来解释"折叠"是怎么回事。"""
++    """把一个文件夹拆开看里面有什么 —— 用来解释"折叠"是怎么回事。
++
++    ★ 2026-09-20 修：原实现是 os.walk + os.path.islink，这两个对 Windows 目录联接
++      （junction）都失效 —— os.walk 把 junction 当普通目录走进去，islink 又拦不住。
++      后果：主扫描显示 0 个文件的地方，「点开看里面」显示 20,000 个文件、体积比这一行
++      本身还大。同一个东西给出两个数字，用户看一眼就不信了。
++      现在跟 collect_files 用同一套遍历：scandir + 查「重解析点」那一位。
++    """
+     if not os.path.isdir(path):
+         return {"ok": False, "error": "不是目录"}
++    root = norm_root(path)
++    cut = len(root) + 1
+     files = []
+-    for dirpath, dirnames, filenames in os.walk(path, onerror=lambda e: None):
+-        dirnames[:] = [d for d in dirnames
+-                       if not os.path.islink(os.path.join(dirpath, d))
+-                       and not should_skip(d, os.path.relpath(os.path.join(dirpath, d), path),
+-                                           depth_of(os.path.relpath(os.path.join(dirpath, d), path)))]
+-        for fn in filenames:
+-            if is_reserved(fn):
+-                continue
+-            try:
+-                st = os.stat(os.path.join(dirpath, fn), follow_symlinks=False)
+-            except (OSError, ValueError):
+-                continue
+-            files.append((os.path.join(dirpath, fn), st.st_size, st.st_mtime))
+-            if len(files) >= cap:
+-                break
+-        if len(files) >= cap:
+-            break
++    links_skipped = 0
++    errors = 0
++    stack = [root]
++    while stack and len(files) < cap:
++        cur = stack.pop()
++        try:
++            with os.scandir(cur) as it:
++                for e in it:
++                    if len(files) >= cap:
++                        break
++                    try:
++                        if e.is_dir(follow_symlinks=False):
++                            # 同 collect_files：junction 的属性里也带 DIRECTORY，
++                            # 光看 is_dir(follow_symlinks=False) 拦不住，必须看重解析位。
++                            if getattr(e.stat(follow_symlinks=False),
++                                       "st_file_attributes", 0) & ATTR_REPARSE:
++                                links_skipped += 1
++                                continue
++                            rel = e.path[cut:] if len(e.path) > cut else e.name
++                            if should_skip(e.name, rel, depth_of(rel)):
++                                continue
++                            stack.append(e.path)
++                        elif e.is_file(follow_symlinks=False):
++                            if is_reserved(e.name):
++                                continue
++                            info = e.stat(follow_symlinks=False)
++                            files.append((e.path, info.st_size, info.st_mtime))
++                    except OSError:
++                        errors += 1
++        except OSError:
++            errors += 1
+     total = sum(f[1] for f in files)
+     files.sort(key=lambda x: -x[1])
+     return {"ok": True, "path": path, "count": len(files), "total_size": total,
+-            "capped": len(files) >= cap,
++            "capped": len(files) >= cap, "links_skipped": links_skipped,
++            "errors": errors,
+             "items": [{"name": os.path.basename(p),
+-                       "rel": os.path.relpath(p, path),
++                       "rel": os.path.relpath(p, root),
+                        "size": s,
+                        "mtime": time.strftime("%Y-%m-%d", time.localtime(m))}
+                       for p, s, m in files[:top]]}
+@@ -620,9 +644,27 @@
+ 
+ 
+ # ────────────────────────── 打分与定档 ──────────────────────────
++def _num(x, default=0.0):
++    """把模型回包里的数值字段收敛成 float。
++
++    ★ 2026-09-20 修：模型偶尔不回 confidence（或回个字符串）。原来 None 会一路传下去，
++      到 score_entry 里 min(1.0, None) 直接 TypeError —— 整个任务作废。
++      缺字段就按「零把握」处理：结论会被压到「慎重」，倒向安全那一侧。
++    """
++    try:
++        f = float(x)
++    except (TypeError, ValueError):
++        return default
++    if f != f:                                     # NaN
++        return default
++    return f
++
++
+ def score_entry(e, kind, conf, d_raw):
+     w = CFG["weights"]
+     r = CFG["rules"]
++    conf = _num(conf)
++    d_raw = _num(d_raw)
+     sh = w["shrink_floor"] + (1 - w["shrink_floor"]) * max(0.0, min(1.0, conf))
+     ag = 1.0 + w["age_max"] * min(1.0, idle_days(e["mtime_epoch"]) / w["age_full_days"])
+     raw = d_raw * sh * ag
+@@ -645,6 +687,9 @@
+       结论却纹丝不动。连是什么都不知道，凭什么建议删。
+     """
+     r = CFG["rules"]
++    conf = _num(conf)
++    d_raw = _num(d_raw)
++    kind_conf = _num(kind_conf, None)
+     base = RAW_TIER[int(round(max(0, min(3, d_raw))))]
+     cap = r["verdict_cap_by_kind"].get(kind, "建议删除")
+     floor = r.get("kind_conf_floor")
+@@ -708,6 +753,7 @@
+     """
+     g, r, b = CFG["gates"], CFG["rules"], CFG["batch"]
+     usage = {"input_tokens": 0, "output_tokens": 0, "requests": 0}
++    job["usage"] = dict(usage)          # 一个请求都没发成时，前端也得拿到 usage
+     ulock = threading.Lock()
+ 
+     def note(res):
+@@ -719,6 +765,7 @@
+             job["usage"] = dict(usage)
+ 
+     classes = build_classes(entries)
++    failed = {}          # {类下标: 失败原因} —— 这一批没判出来，但绝不能让它在结果里消失
+     gate = [0] * len(entries)
+     kind = [None] * len(entries)
+     kind_conf = [None] * len(entries)
+@@ -739,21 +786,37 @@
+         lock = threading.Lock()
+         desc = describe_short if short else describe
+ 
++        def mark_failed(ci_batch, why):
++            """★ 单批失败 = 这一批降级，不是整个任务作废。
++
++            原来这里直接 raise，异常经 ex.map 冒到 run_job 的兜底 except ——
++            已经判好的几百条结论一个字都不留，用户只看到一句报错。
++            现在记下来、继续跑其它批，失败的类在结果里以「慎重 / 需人工」露头。
++            """
++            with ulock:
++                for ci in ci_batch:
++                    failed.setdefault(ci, (why or "")[:200])
++                job["degraded"] = len(failed)
++
+         def work(ci_batch):
+             if job.get("cancel"):
+                 return
+-            qs = build_q(ci_batch)
+-            lines = [desc(j, entries[classes[ci]["rep"]]) for j, ci in enumerate(ci_batch)]
+             try:
++                qs = build_q(ci_batch)
++                lines = [desc(j, entries[classes[ci]["rep"]]) for j, ci in enumerate(ci_batch)]
+                 res = ask_jev(qs, lines, stop=lambda: bool(job.get("cancel")))
++                if job.get("cancel"):
++                    return
++                note(res)
++                on_res(ci_batch, res)
+             except RuntimeError as e:
+                 if "已中止" in str(e):
+                     return
+-                raise
+-            if job.get("cancel"):
++                mark_failed(ci_batch, str(e))
+                 return
+-            note(res)
+-            on_res(ci_batch, res)
++            except Exception as e:
++                mark_failed(ci_batch, repr(e))
++                return
+             with lock:
+                 done[0] += len(ci_batch)
+                 job["phase"] = "%s %d/%d" % (label, done[0], len(ci_list))
+@@ -780,7 +843,8 @@
+     round_run(list(range(len(classes))), q1, on1, "第1关/4 · 认名字", short=True)
+ 
+     # ── 第 2 关：类别 ──
+-    pass1 = [ci for ci, c in enumerate(classes) if kind[c["rep"]] is None]
++    pass1 = [ci for ci, c in enumerate(classes)
++             if kind[c["rep"]] is None and ci not in failed]
+ 
+     def q2(ci_batch):
+         return {"k%d" % j: {"type": "choice", "instructions": g["kind"] % (j + 1),
+@@ -847,11 +911,17 @@
+ 
+     # ── 汇总：代表结论映射回全部成员 ──
+     items = []
++    degraded_items = 0
+     for ci, c in enumerate(classes):
+         rep = c["rep"]
+         k, kc = kind[rep], kind_conf[rep]
++        why = failed.get(ci)
+         if k is None:
+-            continue                                   # 没判出来（被中止）
++            if why is None:
++                continue                               # 既没结论也没有失败记录 = 被中止截断
++            k = "unknown"                              # 这一批请求挂了 → 降级，但必须露头
++        if why:
++            degraded_items += 1
+         dr, dc, dp, kp = d_raw[rep], d_conf[rep], d_prob[rep], kind_prob[rep]
+         gt = gate[rep]
+         cc = class_choice.get(ci)
+@@ -876,10 +946,11 @@
+                 floor = r.get("kind_conf_floor")
+                 ok = kc is not None and kc >= (floor if floor is not None else 0.5)
+                 verdict = "别碰" if ok else "慎重"
+-            row_conf = kc if kc is not None else 0.0
++            row_conf = _num(kc)
+         else:
+             d_final, sh, ag = score_entry(entries[rep], k, dc, dr)
+-            row_conf = min([x for x in (dc, kc) if x is not None] or [dc])
++            _cands = [v for v in (_num(dc, None), _num(kc, None)) if v is not None]
++            row_conf = min(_cands) if _cands else 0.0
+             verdict = verdict_of(k, row_conf, dr, kc)
+ 
+         for i in c["members"]:
+@@ -896,7 +967,7 @@
+                 "d_prob": dp, "shrink": sh, "age_boost": ag, "d_final": d_final,
+                 "verdict": verdict,
+                 "needs_human": (row_conf < 0.4) or k == "unknown",
+-                "gate": gt, "swing": swing,
++                "gate": gt, "swing": swing, "degraded": why,
+                 "class_size": len(c["members"]), "is_rep": (i == rep),
+                 "class_choice": cc,
+             })
+@@ -905,7 +976,9 @@
+     stats = {"entries": len(entries), "classes": len(classes),
+              "dedup_saved": len(entries) - len(classes),
+              "gate1_blocked": blocked1[0],
+-             "gate3_asked": len(pass2), "gate4_asked": len(multi)}
++             "gate3_asked": len(pass2), "gate4_asked": len(multi),
++             "requests": usage["requests"],
++             "degraded": len(failed), "degraded_items": degraded_items}
+     return items, stats
+ 
+ 
+@@ -963,7 +1036,7 @@
+             return
+         job["state"] = "done"
+         job["phase"] = "完成 · %d 条归并成 %d 类，只判了 %d 次" % (
+-            stats["entries"], stats["classes"], stats["classes"])
++            stats["entries"], stats["classes"], stats.get("requests", 0))
+         job["elapsed_ms"] = int((time.time() - t0) * 1000)
+         save_cache(root, job)
+     except Exception as e:
+@@ -1197,6 +1270,7 @@
+                     "replaced": j.get("replaced"),
+                     "cache": j.get("cache"), "cursor": total, "items": items,
+                     "dedup": j.get("dedup"), "rejudge_of": j.get("rejudge_of"),
++                    "degraded": j.get("degraded"),
+                     "usage": j.get("usage")})
+             if p == "/api/jobs":
+                 with JOBS_LOCK:
+
+--- a/index.html
++++ b/index.html
+@@ -704,6 +704,9 @@
+         <span></span></div>`;
+     }
+     const ws = warnShort(it);
++    const dg = it.degraded
++      ? `<span class="tag" style="background:#FDF0D5;color:#8A5A00;margin-right:5px" title="这一批请求没成功，这条结论是降级出来的 —— 请自己看一眼">没判出</span>`
++      : "";
+     const ft = FLASH.get(it.path);
+     const flash = (ft && Date.now() - ft < 700) ? " flash" : "";
+     const pv = it.privacy ? `<span class="tag" style="background:var(--red-bg);color:var(--red-tx);margin-right:5px">隐私?</span>` : "";
+@@ -716,7 +719,7 @@
+       title="${esc(rowTip(it))}" style="${it.is_dir?"cursor:pointer":""}">
+       <span class="tx3" style="font-size:11px">${i+1}</span>
+       <div style="min-width:0" class="cellname" title="点击展开 / 收起完整路径">
+-        <div class="nm">${pv}${esc(maskName(it.name))}${it.is_dir?' <span class="tx3" style="font-size:10px">›</span>':""}${ws?` <span class="wchip" title="${esc(warnLong(it))}">⚠ ${esc(ws)}</span>`:""}</div>
++        <div class="nm">${dg}${pv}${esc(maskName(it.name))}${it.is_dir?' <span class="tx3" style="font-size:10px">›</span>':""}${ws?` <span class="wchip" title="${esc(warnLong(it))}">⚠ ${esc(ws)}</span>`:""}</div>
+         <div class="fullpath">${esc(mask(it.path))}</div>
+       </div>
+       <span style="text-align:right;font-size:12px">${fsize(it.size)}</span>
+@@ -738,6 +741,8 @@
+   $("#foot2").textContent = ITEMS.length && u && u.requests
+     ? `JEV ${u.requests} 次调用 · ${(u.input_tokens/1000).toFixed(1)}k token · $${(u.input_tokens/1e6*0.042).toFixed(5)}${avgTx} · 全程只读${links}`
+     : (ITEMS.length ? `全程只读，不会删任何文件${avgTx}${links}` : "");
++  const dgN = DEDUP && (DEDUP.degraded_items || DEDUP.degraded);
++  if(dgN) $("#foot2").textContent += `　·　⚠ 有 ${dgN} 项没判出来（请求失败，已按「慎重」处理）`;
+ }
+ 
+ /* ---------- ② 构成 ---------- */
+@@ -1068,7 +1073,8 @@
+   if(!r.ok){ $("#exSub").textContent = r.error || "打不开"; return; }
+   $("#exSub").innerHTML = `<b style="font-weight:500">${esc(mask(path))}</b>`
+     + `　共 <b style="font-weight:500">${r.count.toLocaleString()}</b> 个文件 · ${fsize(r.total_size)}`
+-    + (r.capped ? `（文件太多，只统计了前 ${r.count.toLocaleString()} 个）` : "");
++    + (r.capped ? `（文件太多，只统计了前 ${r.count.toLocaleString()} 个）` : "")
++    + (r.links_skipped ? `　·　跳过 ${r.links_skipped.toLocaleString()} 个链接（junction/符号链接，指向的内容在别处，不重复统计）` : "");
+   $("#exList").innerHTML = r.items.length
+     ? r.items.map((x,i)=>`<div class="ditem" style="cursor:default">
+         <span class="tx3 tiny" style="width:22px">${i+1}</span>
+
+# config.json：无改动

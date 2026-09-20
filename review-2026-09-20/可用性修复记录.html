@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JEV 硬盘体检 · 可用性修复记录</title>
+<style>
+:root{
+  --bg:#FBFAF7; --card:#FFFFFF; --surf:#F1EFE8; --line:#E4E1D8; --line2:#D3D1C7;
+  --tx:#2C2C2A; --tx2:#5F5E5A; --tx3:#8A8880;
+  --green:#1D9E75; --green-bg:#E1F5EE; --green-tx:#085041;
+  --blue:#378ADD; --blue-bg:#E6F1FB; --blue-tx:#0C447C;
+  --amber:#EF9F27; --amber-bg:#FAEEDA; --amber-tx:#854F0B;
+  --red:#E24B4A; --red-bg:#FCEBEB; --red-tx:#A32D2D;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:15px/1.75 "PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;font-weight:600;margin:0 0 6px;letter-spacing:-.3px}
+.sub{color:var(--tx2);font-size:14px;margin-bottom:34px}
+h2{font-size:19px;font-weight:600;margin:52px 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h2 .n{color:var(--tx3);font-weight:400;font-size:14px;margin-right:8px}
+h3{font-size:15.5px;font-weight:600;margin:26px 0 8px}
+p{margin:12px 0}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;
+  background:var(--surf);padding:1px 5px;border-radius:4px;color:#3A3A38}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:18px 0}
+.card.warn{border-color:#F0C9C9;background:#FFFDFD}
+.card.good{border-color:#C6E7DA;background:#FCFEFD}
+.card.info{border-color:#C6DBF2;background:#FCFDFF}
+.verdict{background:#2C2C2A;color:#FBFAF7;border-radius:12px;padding:22px 24px;margin:26px 0}
+.verdict p{margin:0}
+.verdict .big{font-size:17px;line-height:1.72;font-weight:500}
+.verdict .small{color:#B9B7AE;font-size:13.5px;margin-top:12px;line-height:1.65}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--tx2);font-weight:500;background:var(--surf)}
+td.num{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:nowrap}
+td.ok{color:var(--green-tx);font-weight:600}
+td.no{color:var(--red-tx);font-weight:600}
+.tag{display:inline-block;font-size:11px;padding:1.5px 7px;border-radius:5px;font-weight:600;white-space:nowrap}
+.t-p0{background:var(--red-bg);color:var(--red-tx)}
+.t-p1{background:var(--amber-bg);color:var(--amber-tx)}
+.t-ok{background:var(--green-bg);color:var(--green-tx)}
+.t-new{background:var(--blue-bg);color:var(--blue-tx)}
+img.shot{width:100%;border:1px solid var(--line2);border-radius:10px;margin:8px 0 4px;display:block}
+.cap{font-size:12.5px;color:var(--tx3);margin:0 0 22px;line-height:1.6}
+.hi{background:#FFF3D6;padding:0 3px;border-radius:3px}
+ul,ol{margin:12px 0;padding-left:22px}
+li{margin:7px 0}
+.kv{display:grid;grid-template-columns:1fr auto;gap:5px 16px;font-size:13.5px;margin:10px 0}
+.kv .v{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--tx2);text-align:right}
+.steps{counter-reset:s;list-style:none;padding:0;margin:16px 0}
+.steps li{counter-increment:s;position:relative;padding-left:38px;margin:14px 0}
+.steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:24px;height:24px;
+  border-radius:50%;background:var(--surf);color:var(--tx2);font-size:12px;font-weight:600;
+  display:flex;align-items:center;justify-content:center}
+.q{color:var(--tx3);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>JEV 硬盘体检 · 可用性修复记录</h1>
+<div class="sub">
+  这一轮修的是<b>「用起来别扭」</b>，不是「代码报错」。方向和上一份体验评审接着。<br>
+  做法：先用真实浏览器把七项问题变成可断言的测试 → 看着它红 → 再动手 → 看它绿。<br>
+  全部数字都是本机实测，改完之后项目里多了 4 个测试文件，改一次跑一次。
+</div>
+
+<div class="verdict">
+  <p class="big">
+    七项全修完了，另外还修掉一处<b>我自己在修的过程中新引入的缺陷</b>——是端到端测试逮出来的，不是我回头看出来的。
+  </p>
+  <p class="big" style="margin-top:14px">
+    最要紧的那条其实只有一个根因：<b>界面在数据到齐之前就开始画了</b>。
+    同一个屏幕上「3 次调用」和真值「4 次」打架、「归并 6 类」整段消失——都是它。
+  </p>
+  <p class="small">
+    改动量 <b>index.html +212/-35 · server.py +44/-2 · config.json 零改动</b>。<br>
+    验收 <b>96 条断言全绿</b>（8 + 28 后端，22 纯逻辑，38 浏览器端到端）。<br>
+    回退点 <code>_backup/usability-fix-20260920-161743/</code>，拷回两个文件即可。
+  </p>
+</div>
+
+<h2><span class="n">01</span>先跑一遍「修复前」，把问题变成数字</h2>
+
+<p>不读代码猜，先把界面点一遍。我在真实 Edge 里真扫了一次 <code>E:\whisper_models</code>（158 个文件 / 4 次调用 / 约 $0.0003），
+然后拿<b>屏幕上显示的数字</b>去和<b>缓存文件里的真值</b>对账。</p>
+
+<table>
+<tr><th>屏幕 / 真值</th><th>修复前</th><th>结论</th></tr>
+<tr><td>列表脚注的调用次数</td><td class="num">3 次 · 6.0k token</td><td class="no">真值是 4 次 / 6806 token</td></tr>
+<tr><td>概要行</td><td class="num">158 个文件 → 判 8 条</td><td class="no">「归并 6 类」整段没了</td></tr>
+<tr><td>② 构成 · 按落点</td><td class="num">1 格 ["E:"]</td><td class="no">一根 100% 的柱子</td></tr>
+<tr><td>一句话洞察</td><td class="num">最大的一块堆在 E:</td><td class="no">等于没说</td></tr>
+<tr><td>脱敏最大档下的路径</td><td class="num">E:\whisper_models\whisper-large-v3-openvino\encoder</td><td class="no">原样暴露</td></tr>
+<tr><td>清单（搜索/筛选/折叠）</td><td class="num">一个都没有</td><td class="no">只能滚</td></tr>
+<tr><td>「载入上次结果」</td><td class="num">永远只载最新那份</td><td class="no">20 份缓存没法挑</td></tr>
+</table>
+
+<div class="card warn">
+<b>端到端第一遍：6 通过 / 22 失败。</b>
+这 22 条红就是我的施工图——不用猜哪里有问题，跑一遍就列出来了。
+（另外纯逻辑那三条函数当时还没写，直接报「找不到函数」，也是红的。）
+</div>
+
+<h2><span class="n">02</span>动手之前：先备份、再把锚点验一遍</h2>
+
+<p>改动散在二十多个地方，硬改很容易误伤。所以我沿用上一轮的规矩：</p>
+
+<ul>
+<li><b>改前先备份</b>：<code>_backup/usability-fix-20260920-161743/</code>，原件、补丁脚本、命中日志都在。</li>
+<li><b>补丁脚本要求每个锚点「在文件里恰好出现一次」</b>，命中 0 次或 2 次以上就当场中止——不模糊匹配、不猜。</li>
+<li><b>先 dry-run 验 31 处</b>，全命中才写盘；写盘后立刻做 Python 与前端 JS 两遍语法检查。</li>
+</ul>
+
+<div class="card info">
+31 处锚点全部唯一命中（index.html 28 / server.py 3）。
+写盘后 <code>PY_SYNTAX_OK</code>、<code>scripts=1 errors=0</code>。
+</div>
+
+<h2><span class="n">03</span>七项，逐条说清楚</h2>
+
+<h3>P0-1 + P0-2 <span class="tag t-p0">同一个根因</span> 数字两套 / 归并类消失</h3>
+
+<p>查下来根因只有一个，而且很朴素——<b><code>poll()</code> 里先 <code>render()</code>，再给状态赋值</b>：</p>
+
+<pre style="background:var(--surf);border-radius:8px;padding:12px 14px;overflow:auto;font-size:12.5px;line-height:1.6">if (s.items.length) { ...; render(); }   // ← 先在旧的 DEDUP / USAGE / FILE_COUNT 上画了一遍
+...
+if (s.dedup) DEDUP = s.dedup;            // ← 数据这才进来，慢一拍
+if (s.usage) USAGE = s.usage;</pre>
+
+<p>更要命的是<b>收尾那一次轮询没有新条目</b>——于是连 <code>render()</code> 都不进。
+「归并 6 类」和最终 token 数<b>从头到尾没机会上屏</b>，列表脚注永远停在倒数第二次的 3 次调用上。</p>
+
+<p>修法两步：把状态吸收挪到渲染之前（抽成 <code>absorb(s)</code>），并在收尾时<b>补画最后一帧</b>。</p>
+
+<div class="card good">
+修后：脚注 <b>4 次调用 · 6.8k token</b>，与缓存真值逐字一致；概要行 <b>158 个文件 → 归并 6 类 → 判 8 条</b>。
+<br><span class="q">顺带说一句：上一轮我修过的「界面写只判了 6 次、脚注写 4 次」也是同一类毛病——那次改的是症状，这次才动到根。</span>
+</div>
+
+<h3>P0-3 <span class="tag t-p0">按落点算错了基准</span></h3>
+
+<p>「按落点」分组时，剥的是<b>用户主目录</b>而不是<b>本次扫描的根</b>。
+扫 C 盘没问题，扫 D 盘、E 盘时一个都匹配不上——于是所有条目全归到 <code>"E:"</code> 一格。</p>
+
+<p>抽出 <code>locOf()</code>，优先剥扫描根、其次退回主目录。</p>
+
+<div class="card good">
+修后：<b>3 格</b>，标签是真实子目录名（<code>models--openai--whisper-large-v3</code> 80% / <code>whisper-large-v3-openvino</code> 20% / <code>xet</code>）。<br>
+洞察也跟着变成有用的话：「28.80 GB 里有 25.90 GB 是程序本体；最大的一块落在 models--openai--whisper-large-v3（相对本次扫描的目录）」。
+</div>
+
+<h3>P0-4 <span class="tag t-p0">脱敏开了，路径还是漏</span></h3>
+
+<p>名字列打码了（<code>Git-•••.exe</code>），<b>展开的完整路径从头到尾没打码</b>——因为那条路径只过了 <code>mask()</code>（只管主目录里的用户名），没过管文件名的 <code>maskName()</code>。</p>
+
+<p>新增 <code>maskPath()</code>：最大档下<b>逐段盖住每一层</b>，只留盘符，并统一用在列表、展开弹窗、缓存列表三处。</p>
+
+<div class="card good">
+修前 <code>E:\whisper_models\whisper-large-v3-openvino\encoder</code>
+→ 修后 <code>E:\whis•••\whis•••\enco•••</code>
+<br><span class="q">「脱敏：路径」这一档的行为没变（只盖用户名），只有主动切到最大档才逐段盖。这一点写在下面第 5 节。</span>
+</div>
+
+<h3>P1-1 <span class="tag t-p1">清单没有出口</span></h3>
+
+<p>实测 560px 可视 / 68,094px 内容 = 要滚 122 屏，而且分组条不能点、没有筛选、没有搜索。
+<b>重复条目是「同签名一并判定」的，可这句话只藏在 hover 提示里。</b></p>
+
+<p>加了一条工具条：搜索框（名字 / 路径 / 类别都能搜）、四个动作筛选项、「按动作分组」开关、「显示 N / 共 M 条」计数；
+分组条现在可点击折叠；搜不到时有明确空态而不是白屏。</p>
+
+<h3>P1-2 <span class="tag t-p1">排序文案说了大话</span></h3>
+
+<p>表头原话是「点这列排序，没把握的会浮上来」，但排序是<b>组内</b>的——全列表最小的 0.07 可能躺在第 24 行。</p>
+
+<p>两件事：把文案改成实话（说明是组内排序），并给一个<b>「按动作分组」开关</b>——关掉之后就是真正的全局排序。</p>
+
+<div class="card good">
+关掉分组后实测前 8 行把握：<code>0.49 → 0.61 → 0.70 → 0.70 → 0.75 → 0.87 → 0.90 → 0.90</code>，最小的确实浮上来了。
+</div>
+
+<h3>P1-3 <span class="tag t-p1">缓存只能载最新那份</span></h3>
+
+<p>缓存目录里躺着 20 份结果，界面上没有任何选择入口——录屏时想挑一份最好看的都挑不了。</p>
+
+<p>服务端 <code>/api/caches?meta=1</code> 多回一份元数据（扫描根 / 时间 / 文件数 / 体积）。
+<b>不整份读 JSON</b>——那些文件动辄几 MB，20 个都读太慢；<code>root</code>、<code>created</code> 这些键在 <code>json.dump</code> 时排在最前面，读开头 2KB 就够。</p>
+
+<div class="card good">
+点「载入上次结果」弹出列表，每条显示<b>当时扫的哪个目录、什么时候、多少文件多大</b>，点哪条载哪条。
+</div>
+
+<h2><span class="n">04</span>一处我自己引入又修掉的缺陷</h2>
+
+<div class="card warn">
+<p style="margin-top:0">第一版折叠是这么实现的：<b>被折叠的组，条目在图里被过滤掉，于是那一组的分组条也跟着消失了</b>。</p>
+<p>结果端到端测出这个数字：<b>折叠前 8 行 → 折叠后 7 行 → 再点 6 行</b>。</p>
+<p style="margin-bottom:0">点第二次不是在展开，是<b>把下一个组也收起来了</b>——因为第一个组已经不在页面上，脚本点到了别的组。
+用户一旦收起某个组，就<b>再也点不开它</b>。</p>
+</div>
+
+<p>修法：折叠不再参与过滤，只在渲染条目时跳过，<b>组头一律保留</b>，并标出「· 已收起」。</p>
+
+<div class="card good">
+修后：<b>8 行 → 7 行 → 8 行</b>。折叠后组头还在，文字是「▸ 可以删 1 项 · 已收起」。
+</div>
+
+<p class="q">这件事值得单独拎出来说：它不是我回头审出来的，是<b>测试自己撞出来的</b>。
+我第一版的断言写得很粗（点「第一个分组条」），结果它连续两次点到不同的组，暴露出行为异常。
+后来我把断言改成<b>锁定同一个组</b>，并额外钉上「组头必须还在」——这条现在是最有价值的回归防线之一。</p>
+
+<h2><span class="n">05</span>证据：修前 vs 修后</h2>
+
+<table>
+<tr><th>项目</th><th>修复前（实测）</th><th>修复后（实测）</th></tr>
+<tr><td>列表脚注 · 调用次数</td><td class="no">3 次</td><td class="ok">4 次 = 缓存真值</td></tr>
+<tr><td>列表脚注 · token</td><td class="no">6.0k</td><td class="ok">6.8k = 6806</td></tr>
+<tr><td>概要行</td><td class="no">158 个文件 → 判 8 条</td><td class="ok">158 → 归并 6 类 → 判 8 条</td></tr>
+<tr><td>② 按落点</td><td class="no">1 格 ["E:"]</td><td class="ok">3 格（真实子目录）</td></tr>
+<tr><td>折叠 8 行的「可以删」组</td><td class="no">8 → 7 → 6（点不回来）</td><td class="ok">8 → 7 → 8</td></tr>
+<tr><td>最大档下的展开路径</td><td class="no">原样暴露</td><td class="ok">E:\whis•••\whis•••\enco•••</td></tr>
+<tr><td>缓存回放</td><td class="no">只有最新那份</td><td class="ok">20 份可选，带目录与时间</td></tr>
+<tr><td colspan="3" style="border-bottom:0"><b>端到端断言</b>　<span class="no">6 / 28 通过</span>　→　<span class="ok">38 / 38 通过</span></td></tr>
+</table>
+
+<img class="shot" src="shots-fix/01-清单.png" alt="修复后的清单页">
+<p class="cap">① 清单：工具条在表头上方，概要行补回了「归并 6 类」，脚注是 4 次调用 / 6.8k token。顶栏的路径已按当前档位脱敏。</p>
+
+<img class="shot" src="shots-fix/02-构成.png" alt="修复后的构成页">
+<p class="cap">② 构成：「按落点」现在是三根真实子目录的柱子（原来是一根 100% 的「E:」），洞察也跟着变成一句有用的话。</p>
+
+<h2><span class="n">06</span>测试：96 条断言，改一次跑一次</h2>
+
+<table>
+<tr><th>文件</th><th>条数</th><th>管什么</th></tr>
+<tr><td><code>tests/test_fixes.py</code></td><td class="num">8</td><td>上一轮的四个后端缺陷（junction / 单批失败 / 缺字段 / 计数）</td></tr>
+<tr><td><code>tests/test_adversarial.py</code></td><td class="num">28</td><td>上一轮的对抗性攻击面（类型错、全批失败、口径分歧…）</td></tr>
+<tr><td><code>tests/test_ui_logic.mjs</code></td><td class="num">22</td><td>本轮：脱敏路径、按落点、搜索/筛选——<b>从 index.html 直接抠出函数来验</b></td></tr>
+<tr><td><code>tests/ui_verify.cjs</code></td><td class="num">38</td><td>本轮：真实 Edge 点一遍 + 真扫一次，屏幕数字对缓存真值</td></tr>
+<tr><td><code>tests/ab_compare.py</code></td><td class="num">—</td><td>上一轮的 A/B 对照工具（新旧两版喂同一份畸形回包）</td></tr>
+</table>
+
+<p>跑法（在 <code>jev-disk-mvp/</code> 下）：</p>
+<pre style="background:var(--surf);border-radius:8px;padding:12px 14px;overflow:auto;font-size:12.5px;line-height:1.6">python tests\test_fixes.py
+python tests\test_adversarial.py
+node   tests\test_ui_logic.mjs
+node   tests\ui_verify.cjs "E:\whisper_models"   # 需要 8849 服务带 key 起好</pre>
+
+<div class="card info">
+<b>纯逻辑测试的做法值得记一笔：</b>界面逻辑全在单文件 <code>&lt;script&gt;</code> 里，直接 import 会把 <code>boot()</code> 一起跑起来（要服务、要 key）。
+所以测试文件从源码里<b>把目标函数连同它依赖的 <code>mask()</code>/<code>bucketOf()</code>/<code>rc()</code> 一起抠出来</b>，配上最小依赖在 Node 里跑。
+好处是函数一改名、一改行为，当场就红，而且验的是真身不是仿写版。
+</div>
+
+<h2><span class="n">07</span>顺手修掉的一个测试自身的毛病</h2>
+
+<p>第一次跑纯逻辑测试时报了一条红：<code>只勾「建议不清理」：留 1 条</code>，实际返回空数组。</p>
+
+<p>我没有直接改产品代码——先做了个最小复现，把沙箱里每条条目归到哪一组打出来看。结果：<b>沙箱完全正确</b>，
+错在我自己的测试脚本——<code>call()</code> 已经取过名字了，断言里又 <code>map</code> 了一遍，拿到 <code>undefined</code>。</p>
+
+<p class="q">这条写进来是因为它说明了一件事：<b>先写测试的价值不只在防产品 bug，也在于它会逼你把测试本身也验一遍。</b>
+如果我直接去改 <code>fltItems</code>，就会去修一个根本不存在的问题。</p>
+
+<h2><span class="n">08</span>我没动的，和已知的边界</h2>
+
+<p>说清楚哪些没做，比说「全修好了」有用：</p>
+
+<ul>
+<li><b>键盘和读屏还是零</b>：<code>tabindex</code> 0 个、<code>aria</code> 0 个、没有快捷键。这一轮完全没碰——它是独立的一块工作，且更适合在发布前集中做一次。</li>
+<li><b>虚拟滚动没加</b>：上一轮实测 2000 行 DOM 单次渲染 27–35ms，不需要。真问题是信息没出口，这轮解决了。</li>
+<li><b>只测了 Edge</b>：Chrome / Safari 没测。</li>
+<li><b>故障态界面没测</b>：无权限目录、断网、key 失效时界面长什么样，这轮没覆盖。</li>
+<li><b>并发多任务</b>：只看到横幅，没真压多个同时跑。</li>
+<li><b>「脱敏：路径＋文件名」这一档是行为变更</b>：以前它只盖文件名，现在连路径每一层都盖。用惯旧行为的人会觉得「怎么全糊了」——但这是它该有的样子，因为这一档存在的意义就是拿去截图。</li>
+</ul>
+
+<h2><span class="n">09</span>回退与产物</h2>
+
+<div class="card">
+<div class="kv">
+  <span>改动前存档</span><span class="v">jev-disk-mvp/_backup/usability-fix-20260920-161743/</span>
+  <span>补丁脚本（含命中日志）</span><span class="v">apply_fix3.py / apply_fix4.py</span>
+  <span>改动清单</span><span class="v">review-2026-09-20/可用性修复改动.diff</span>
+  <span>改动量</span><span class="v">index.html +212/-35 · server.py +44/-2</span>
+  <span>config.json</span><span class="v">零改动</span>
+</div>
+<p style="margin-bottom:0">整体回退：把存档里的 <code>index.html</code> 和 <code>server.py</code> 拷回项目根目录即可。想只退一半也可以，两个文件互相独立。</p>
+</div>
+
+<p class="q" style="margin-top:30px">
+这一轮所有「实测」都是本机真实执行：3 次真扫 <code>E:\whisper_models</code>（每次 4 次调用 / 6806 token / $0.00029）、1 次真实浏览器全流程走查。
+扫描产生的缓存文件在 <code>jev-disk-mvp/cache/</code>（已在 .gitignore 里），可以随时删。
+</p>
+
+</div>
+</body>
+</html>

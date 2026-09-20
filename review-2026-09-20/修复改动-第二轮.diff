@@ -1,0 +1,322 @@
+# JEV 硬盘体检 · 第二轮改动（对抗性审查后修复）
+#
+# 基线：_backup/round2-baseline-20260920-154243/（= 第一轮修复后的状态）
+# 对照：jev-disk-mvp/（当前）
+# 跑法：把基线拷回去即可回退本轮。
+
+# server.py    +97   / -27  
+# index.html   +8    / -2   
+# config.json  +0    / -0   
+# server.py  +97 / -27
+--- a/server.py
++++ b/server.py
+@@ -75,16 +75,21 @@
+     root = norm_root(path)
+     cut = len(root) + 1
+     files = []
+     links_skipped = 0
++    other_skipped = 0
+     errors = 0
+     stack = [root]
+-    while stack and len(files) < cap:
++    # ★ 二轮修：多探一个再判「有没有被截断」。原来用 len(files) >= cap 判定，
++    #   文件数恰好等于 cap 时会误报「文件太多，只统计了前 N 个」——
++    #   这句会直接显示在录屏画面上，是自打脸。多扫 1 个的开销可以忽略。
++    probe = cap + 1
++    while stack and len(files) < probe:
+         cur = stack.pop()
+         try:
+             with os.scandir(cur) as it:
+                 for e in it:
+-                    if len(files) >= cap:
++                    if len(files) >= probe:
+                         break
+                     try:
+                         if e.is_dir(follow_symlinks=False):
+                             # 同 collect_files：junction 的属性里也带 DIRECTORY，
+@@ -101,17 +106,26 @@
+                             if is_reserved(e.name):
+                                 continue
+                             info = e.stat(follow_symlinks=False)
+                             files.append((e.path, info.st_size, info.st_mtime))
++                        else:
++                            # ★ 二轮修：既不是目录也不是普通文件的东西（文件级符号
++                            #   链接、悬空链接、socket 等）原来直接掉进缝里 —— 不计
++                            #   体积、不计 links_skipped、也不计 errors，等于凭空消失。
++                            #   collect_files 至少把它们记进 other_skipped。
++                            other_skipped += 1
+                     except OSError:
+                         errors += 1
+         except OSError:
+             errors += 1
++    capped = len(files) > cap
++    if capped:
++        files = files[:cap]
+     total = sum(f[1] for f in files)
+     files.sort(key=lambda x: -x[1])
+     return {"ok": True, "path": path, "count": len(files), "total_size": total,
+-            "capped": len(files) >= cap, "links_skipped": links_skipped,
+-            "errors": errors,
++            "capped": capped, "links_skipped": links_skipped,
++            "other_skipped": other_skipped, "errors": errors,
+             "items": [{"name": os.path.basename(p),
+                        "rel": os.path.relpath(p, root),
+                        "size": s,
+                        "mtime": time.strftime("%Y-%m-%d", time.localtime(m))}
+@@ -650,21 +664,46 @@
+     ★ 2026-09-20 修：模型偶尔不回 confidence（或回个字符串）。原来 None 会一路传下去，
+       到 score_entry 里 min(1.0, None) 直接 TypeError —— 整个任务作废。
+       缺字段就按「零把握」处理：结论会被压到「慎重」，倒向安全那一侧。
+     """
++    if isinstance(x, bool):
++        # ★ 二轮修：True/False 不是数值。float(True)==1.0 会被当成「满把握」——
++        #   方向恰好是危险的（把握越高越少让人复核）。无法解释的输入一律按 default。
++        return default
+     try:
+         f = float(x)
+     except (TypeError, ValueError):
+         return default
+-    if f != f:                                     # NaN
++    if not math.isfinite(f):
++        # ★ 二轮修：NaN 和 inf 一起挡。inf 更阴 —— json.dumps 会写出裸的 Infinity，
++        #   那不是合法 JSON，浏览器 JSON.parse 直接抛错，整个界面白屏。
+         return default
+     return f
++
++
++def _conf01(x, default=0.0):
++    """把「把握度」收敛到 [0,1]。
++
++    ★ 二轮修：把握度和损失分是**两套量纲**（0~1 vs 0~3），所以范围检查不能塞进
++      _num 里 —— 那会把 3.0 分的损失分一起打成 0，整个打分逻辑静默失效。
++      越界的值（比如百分制的 90）不猜、也不截断成 1.0（1.0 是「最有把握」，
++      方向正好是危险的），按 default 处理，倒向安全侧。
++    """
++    f = _num(x, None)
++    if f is None or f < 0.0 or f > 1.0:
++        return default
++    return f
++
++
++def _dict_or_none(x):
++    """概率分布：不是字典就当没有（模型回字符串时，前端 Object.keys 会给出乱码）。"""
++    return x if isinstance(x, dict) else None
+ 
+ 
+ def score_entry(e, kind, conf, d_raw):
+     w = CFG["weights"]
+     r = CFG["rules"]
+-    conf = _num(conf)
++    conf = _conf01(conf)
+     d_raw = _num(d_raw)
+     sh = w["shrink_floor"] + (1 - w["shrink_floor"]) * max(0.0, min(1.0, conf))
+     ag = 1.0 + w["age_max"] * min(1.0, idle_days(e["mtime_epoch"]) / w["age_full_days"])
+     raw = d_raw * sh * ag
+@@ -686,16 +725,19 @@
+       实测 trigger：E:\\whisper_models 37GB —— 修输入后 kind_conf 从 0.78 掉到 0.45，
+       结论却纹丝不动。连是什么都不知道，凭什么建议删。
+     """
+     r = CFG["rules"]
+-    conf = _num(conf)
++    conf = _conf01(conf)
+     d_raw = _num(d_raw)
+-    kind_conf = _num(kind_conf, None)
++    kind_conf = _conf01(kind_conf, None)
+     base = RAW_TIER[int(round(max(0, min(3, d_raw))))]
+     cap = r["verdict_cap_by_kind"].get(kind, "建议删除")
+     floor = r.get("kind_conf_floor")
+-    if floor is not None and kind_conf is not None and kind_conf < floor:
++    if floor is not None and (kind_conf is None or kind_conf < floor):
+         # 连「这是什么」都没把握 → 一律不许进「可以考虑」以上
++        # ★ 二轮修：原来是 `kind_conf is not None and ...`，即「把握度无效时闸门
++        #   直接跳过」—— 把「不知道」当成了「没问题」，与上一行注释的意图正好相反。
++        #   实测：模型回 confidence="high"（字符串）时，结论能一路走到「建议删除」。
+         cap = min([cap, "慎重"], key=lambda x: -TIER_ORDER[x])
+     if conf < r["low_conf_threshold"]:
+         cap = min([cap, "慎重"], key=lambda x: -TIER_ORDER[x])
+     elif conf < r["mid_conf_threshold"] and TIER_ORDER[base] < TIER_ORDER["可以考虑"]:
+@@ -833,12 +875,12 @@
+         for j, ci in enumerate(ci_batch):
+             rep = classes[ci]["rep"]
+             gate[rep] = 1
+             a = res["answers"].get("r%d" % j, {})
+-            v = a.get("noul")
+-            if v is None or v < g.get("recognize_floor", 0.5):
++            v = _conf01(a.get("noul"), 0.0)
++            if v < g.get("recognize_floor", 0.5):
+                 kind[rep] = "unknown"
+-                kind_conf[rep] = round(v, 4) if isinstance(v, (int, float)) else 0.0
++                kind_conf[rep] = round(v, 4)
+                 blocked1[0] += 1
+ 
+     round_run(list(range(len(classes))), q1, on1, "第1关/4 · 认名字", short=True)
+ 
+@@ -856,10 +898,10 @@
+             rep = classes[ci]["rep"]
+             gate[rep] = 2
+             a = res["answers"].get("k%d" % j, {})
+             kind[rep] = a.get("choice") or "unknown"
+-            kind_conf[rep] = a.get("confidence")
+-            kind_prob[rep] = a.get("probabilities")
++            kind_conf[rep] = _conf01(a.get("confidence"), 0.0)
++            kind_prob[rep] = _dict_or_none(a.get("probabilities"))
+ 
+     round_run(pass1, q2, on2, "第2关/4 · 判类别")
+ 
+     # ── 第 3 关：删除损失（只对「可能是垃圾」的问） ──
+@@ -875,11 +917,11 @@
+         for j, ci in enumerate(ci_batch):
+             rep = classes[ci]["rep"]
+             gate[rep] = 3
+             a = res["answers"].get("d%d" % j, {})
+-            d_raw[rep] = a.get("score")
+-            d_conf[rep] = a.get("confidence")
+-            d_prob[rep] = a.get("probabilities")
++            d_raw[rep] = _num(a.get("score"), None)
++            d_conf[rep] = _conf01(a.get("confidence"), 0.0)
++            d_prob[rep] = _dict_or_none(a.get("probabilities"))
+ 
+     round_run(pass2, q3, on3, "第3关/4 · 问损失")
+ 
+     # ── 第 4 关：同签名一组，处理方式是否一致（类别级决策） ──
+@@ -902,10 +944,10 @@
+     def on4(ci_batch, res):
+         for j, ci in enumerate(ci_batch):
+             a = res["answers"].get("c%d" % j, {})
+             class_choice[ci] = {"choice": a.get("choice"),
+-                                "confidence": a.get("confidence"),
+-                                "probabilities": a.get("probabilities")}
++                                "confidence": _conf01(a.get("confidence"), None),
++                                "probabilities": _dict_or_none(a.get("probabilities"))}
+             gate[classes[ci]["rep"]] = 4
+ 
+     round_run(multi, q4, on4, "第4关/4 · 按组复核", short=True)
+ 
+@@ -943,15 +985,22 @@
+             if k == "unknown":
+                 verdict = "慎重"
+             else:
+                 floor = r.get("kind_conf_floor")
+-                ok = kc is not None and kc >= (floor if floor is not None else 0.5)
++                # ★ 二轮修：这一行原来直接拿 kc 比大小。kc 若是字符串（模型回
++                #   "0.9"），str >= float 抛 TypeError —— 而这个异常出在**汇总阶段**，
++                #   不在 work() 的 try 里，上一轮加的「单批容错」根本兜不住，
++                #   整个任务照样作废。
++                _kc01 = _conf01(kc, None)
++                ok = _kc01 is not None and _kc01 >= (floor if floor is not None else 0.5)
+                 verdict = "别碰" if ok else "慎重"
+-            row_conf = _num(kc)
++            row_conf = _conf01(kc, 0.0)
+         else:
+             d_final, sh, ag = score_entry(entries[rep], k, dc, dr)
+-            _cands = [v for v in (_num(dc, None), _num(kc, None)) if v is not None]
+-            row_conf = min(_cands) if _cands else 0.0
++            # ★ 二轮修：原来是「谁有值就取谁」。字段无效/缺失时被静默剔除，
++            #   等于把「不知道类别的把握度」当成「不参与判断」——乐观方向。
++            #   现在任一无效都算零把握，倒向需要人工确认那一侧。
++            row_conf = min(_conf01(dc, 0.0), _conf01(kc, 0.0))
+             verdict = verdict_of(k, row_conf, dr, kc)
+ 
+         for i in c["members"]:
+             e = entries[i]
+@@ -961,25 +1010,32 @@
+                 "mtime_oldest": e.get("mtime_oldest"),
+                 "idle_days": round(idle_days(e["mtime_epoch"])),
+                 "idle_days_oldest": e.get("idle_days_oldest", 0),
+                 "is_dir": e["is_dir"], "privacy": e.get("privacy", False),
+-                "kind": k, "kind_conf": kc, "kind_prob": kp,
+-                "d_raw": dr, "conf": dc, "row_conf": round(row_conf, 4),
+-                "d_prob": dp, "shrink": sh, "age_boost": ag, "d_final": d_final,
++                "kind": k, "kind_conf": _conf01(kc, None), "kind_prob": _dict_or_none(kp),
++                "d_raw": _num(dr, None), "conf": _conf01(dc, None),
++                "row_conf": round(row_conf, 4),
++                "d_prob": _dict_or_none(dp), "shrink": sh, "age_boost": ag, "d_final": d_final,
+                 "verdict": verdict,
+                 "needs_human": (row_conf < 0.4) or k == "unknown",
+                 "gate": gt, "swing": swing, "degraded": why,
+                 "class_size": len(c["members"]), "is_rep": (i == rep),
+                 "class_choice": cc,
+             })
+ 
+     items.sort(key=lambda x: (TIER_ORDER[x["verdict"]], -(x["d_final"] or 0), -x["size"]))
++    _whys = sorted({w for w in failed.values() if w})
+     stats = {"entries": len(entries), "classes": len(classes),
+              "dedup_saved": len(entries) - len(classes),
+              "gate1_blocked": blocked1[0],
+              "gate3_asked": len(pass2), "gate4_asked": len(multi),
+              "requests": usage["requests"],
+-             "degraded": len(failed), "degraded_items": degraded_items}
++             "degraded": len(failed), "degraded_items": degraded_items,
++             # ★ 二轮修：光有计数不够。key 失效 / 断网 / 服务挂 三种故障长得一模一样，
++             #   得把「为什么没判出来」带出去，否则用户只能靠猜。
++             "degraded_why": _whys[:3],
++             # 每一类都失败 = 不是个别批次抽风，是环境问题 —— 任务层要报错而不是报「完成」
++             "all_failed": bool(classes) and len(failed) >= len(classes)}
+     return items, stats
+ 
+ 
+ # ────────────────────────── 任务 ──────────────────────────
+@@ -1033,8 +1089,16 @@
+             job["state"] = "cancelled"
+             job["phase"] = "已中止（%s）· 保留已判断的 %d 条" % (
+                 job.get("cancel_why", "用户中止"), len(items))
+             return
++        if stats.get("all_failed"):
++            # ★ 二轮修：一次请求都没成功，不该显示成「完成」。
++            #   注意顺序 —— 先判用户主动中止，再判全挂：中止不算故障。
++            job["state"] = "error"
++            job["error"] = "JEV 一次都没调用成功，%d 条都没判出来：%s" % (
++                len(items), (stats.get("degraded_why") or ["原因未知"])[0])
++            job["phase"] = "全部失败 · %d 条没判出来" % len(items)
++            return
+         job["state"] = "done"
+         job["phase"] = "完成 · %d 条归并成 %d 类，只判了 %d 次" % (
+             stats["entries"], stats["classes"], stats.get("requests", 0))
+         job["elapsed_ms"] = int((time.time() - t0) * 1000)
+@@ -1056,8 +1120,14 @@
+         job["dedup"] = stats
+         job["judged"] = len(items)
+         if job.get("cancel"):
+             job["state"] = "cancelled"
++            return
++        if stats.get("all_failed"):
++            job["state"] = "error"
++            job["error"] = "JEV 一次都没调用成功，%d 条都没判出来：%s" % (
++                len(items), (stats.get("degraded_why") or ["原因未知"])[0])
++            job["phase"] = "重判全部失败 · %d 条没判出来" % len(items)
+             return
+         job["state"] = "done"
+         job["phase"] = "重判完成"
+         job["elapsed_ms"] = int((time.time() - t0) * 1000)
+
+# index.html  +8 / -2
+--- a/index.html
++++ b/index.html
+@@ -741,9 +741,14 @@
+   $("#foot2").textContent = ITEMS.length && u && u.requests
+     ? `JEV ${u.requests} 次调用 · ${(u.input_tokens/1000).toFixed(1)}k token · $${(u.input_tokens/1e6*0.042).toFixed(5)}${avgTx} · 全程只读${links}`
+     : (ITEMS.length ? `全程只读，不会删任何文件${avgTx}${links}` : "");
+   const dgN = DEDUP && (DEDUP.degraded_items || DEDUP.degraded);
+-  if(dgN) $("#foot2").textContent += `　·　⚠ 有 ${dgN} 项没判出来（请求失败，已按「慎重」处理）`;
++  if(dgN){
++    // 带上第一手原因：key 失效 / 断网 / 服务挂 不该长得一样（textContent，不转义）
++    const why = (DEDUP.degraded_why && DEDUP.degraded_why.length)
++      ? `　原因：${String(DEDUP.degraded_why[0]).slice(0,80)}` : "";
++    $("#foot2").textContent += `　·　⚠ 有 ${dgN} 项没判出来（请求失败，已按「慎重」处理）${why}`;
++  }
+ }
+ 
+ /* ---------- ② 构成 ---------- */
+ function renderCompose(){
+@@ -1073,9 +1078,10 @@
+   if(!r.ok){ $("#exSub").textContent = r.error || "打不开"; return; }
+   $("#exSub").innerHTML = `<b style="font-weight:500">${esc(mask(path))}</b>`
+     + `　共 <b style="font-weight:500">${r.count.toLocaleString()}</b> 个文件 · ${fsize(r.total_size)}`
+     + (r.capped ? `（文件太多，只统计了前 ${r.count.toLocaleString()} 个）` : "")
+-    + (r.links_skipped ? `　·　跳过 ${r.links_skipped.toLocaleString()} 个链接（junction/符号链接，指向的内容在别处，不重复统计）` : "");
++    + (() => { const skip = (r.links_skipped||0) + (r.other_skipped||0);
++        return skip ? `　·　另有 ${skip.toLocaleString()} 项未计入（目录联接、符号链接等，它们的体积记在各自的真实位置）` : ""; })();
+   $("#exList").innerHTML = r.items.length
+     ? r.items.map((x,i)=>`<div class="ditem" style="cursor:default">
+         <span class="tx3 tiny" style="width:22px">${i+1}</span>
+         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"

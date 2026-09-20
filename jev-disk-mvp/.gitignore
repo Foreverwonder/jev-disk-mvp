@@ -1,0 +1,9 @@
+# API key 存在这里，不要把仓库传出去
+key.txt
+
+# 扫描结果缓存
+cache/
+
+# Python
+__pycache__/
+*.pyc
